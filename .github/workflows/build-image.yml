@@ -1,0 +1,31 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker image tag'
+        required: true
+        default: 'dev'
+
+env:
+  TAG: ${{ github.event.inputs.tag || 'dev' }}
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login docker hub
+        run: docker login -u zlzforever -p  ${{ secrets.DOCKER_USER_PASSWORD }}
+      - name: Build the Docker image
+        run: docker build . --file Dockerfile --tag zlzforever/openiddict-ui:${{ env.TAG }}
+      - name: Publish the Docker image
+        run: docker push zlzforever/openiddict-ui:${{ env.TAG }}

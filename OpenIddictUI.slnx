@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".github\workflows\build-image.yml" />
+    <File Path="AGENTS.md" />
+    <File Path="Dockerfile" />
+    <File Path="readme.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/OpenIddictUI.Api/OpenIddictUI.Api.csproj" />
+    <Project Path="src/OpenIddictUI/OpenIddictUI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenIddictUI.Tests/OpenIddictUI.Tests.csproj" />
+  </Folder>
+</Solution>

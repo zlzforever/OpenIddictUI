@@ -1,0 +1,22 @@
+{
+  "Scopes": [
+    { "Name": "openid", "DisplayName": "OpenID" },
+    { "Name": "profile", "DisplayName": "Profile" },
+    { "Name": "roles", "DisplayName": "Roles" },
+    { "Name": "api1", "DisplayName": "API 1" },
+    { "Name": "api2", "DisplayName": "API 2" }
+  ],
+  "Clients": [
+    {
+      "ClientId": "spa-client",
+      "ClientType": "public",
+      "DisplayName": "SPA Demo Client",
+      "ConsentType": "explicit",
+      "RedirectUris": ["http://localhost:5175/signin-redirect-callback", "http://localhost:5175/signin-silent-callback"],
+      "PostLogoutRedirectUris": ["http://localhost:5175"],
+      "GrantTypes": ["authorization_code", "refresh_token"],
+      "Scopes": ["openid", "profile", "api1"],
+      "RequirePkce": true
+    }
+  ]
+}
