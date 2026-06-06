@@ -25,4 +25,5 @@ WORKDIR /app
 COPY --from=backend /out ./
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "OpenIddictUI.dll"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["dotnet", "OpenIddictUI.dll"]

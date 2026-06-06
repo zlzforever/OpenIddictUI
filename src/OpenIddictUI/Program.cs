@@ -32,7 +32,6 @@ public partial class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.AddEnvironmentSubstitutedAppSettings();
 
-        builder.Configuration.AddJsonFile("serilog.json", optional: true, reloadOnChange: true);
         builder.Configuration.AddJsonFile("openiddict-seed.json", optional: true, reloadOnChange: true);
 
         builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));

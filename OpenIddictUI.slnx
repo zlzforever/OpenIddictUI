@@ -2,7 +2,9 @@
   <Folder Name="/Solution Items/">
     <File Path=".github\workflows\build-image.yml" />
     <File Path="AGENTS.md" />
+    <File Path="docker-entrypoint.sh" />
     <File Path="Dockerfile" />
+    <File Path=".dockerignore" />
     <File Path="readme.md" />
   </Folder>
   <Folder Name="/src/">
