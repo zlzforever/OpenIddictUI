@@ -22,8 +22,14 @@ RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj -c Release -o /out --no-
 # stage 3: 运行时
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
-COPY --from=backend /out ./
+ENV LANG zh_CN.UTF-8
 EXPOSE 8080
+RUN apt-get update &&\
+    apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
+COPY --from=backend /out ./
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+COPY TimesNewRoman.ttf /usr/share/fonts/truetype/deng/
 ENV ASPNETCORE_URLS=http://+:8080
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["dotnet", "OpenIddictUI.dll"]
