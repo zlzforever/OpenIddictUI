@@ -39,7 +39,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiPost } from '../composables/useFetch'
+import { login, captchaImageUrl } from '../services/api'
 
 const props = defineProps<{ returnUrl: string }>()
 const emit = defineEmits<{ error: [msg: string] }>()
@@ -51,14 +51,14 @@ const captchaSrc = ref('')
 
 // 刷新验证码：时间戳参数防浏览器缓存
 function refreshCaptcha() {
-  captchaSrc.value = '/api/v1.0/captcha/image?_t=' + Date.now()
+  captchaSrc.value = captchaImageUrl()
 }
 
 // ② 提交登录
 async function submit() {
   emit('error', '')
   try {
-    const data = await apiPost('/account/login', {
+    const data = await login({
       username: username.value, password: password.value,
       captchaCode: captcha.value, rememberLogin: remember.value,
       button: 'login', returnUrl: props.returnUrl || null

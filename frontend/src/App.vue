@@ -52,7 +52,7 @@
           <label>验证码</label>
           <div class="captcha-row">
             <input class="form-control" v-model="pwdCaptcha" placeholder="验证码" />
-            <img :src="pwdCaptchaSrc" class="captcha-img" @click="refreshPwdCaptcha" />
+            <img :src="pwdCaptchaSrc" class="captcha-img" @click="refreshPwdCaptcha" alt=""/>
           </div>
         </div>
         <div class="modal-actions" style="margin-top:1rem">
@@ -78,7 +78,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useSession } from './composables/useSession'
-import { apiPost } from './composables/useFetch'
+import { changePassword, logout as apiLogout, captchaImageUrl } from './services/api'
 
 const { username, load } = useSession()
 const menuOpen = ref(false)
@@ -119,7 +119,7 @@ function openChangePwdModal() {
   showPwdModal.value = true
 }
 function closePwdModal() { showPwdModal.value = false }
-function refreshPwdCaptcha() { pwdCaptchaSrc.value = '/api/v1.0/captcha/image?_t=' + Date.now() }
+function refreshPwdCaptcha() { pwdCaptchaSrc.value = captchaImageUrl() }
 
 async function submitChangePwd() {
   pwdMsg.value = ''
@@ -127,7 +127,7 @@ async function submitChangePwd() {
   if (!pwdOld.value || !pwdNew.value || !pwdConfirm.value) { pwdMsg.value = '请填写完整'; pwdOk.value = false; return }
   if (pwdNew.value !== pwdConfirm.value) { pwdMsg.value = '两次新密码不一致'; pwdOk.value = false; return }
 
-  const data = await apiPost('/account/change-password', {
+  const data = await changePassword({
     userName: username.value, oldPassword: pwdOld.value,
     newPassword: pwdNew.value, confirmNewPassword: pwdConfirm.value,
     captchaCode: pwdCaptcha.value, button: 'login'
@@ -149,7 +149,7 @@ function openLogoutModal() {
   showLogoutModal.value = true
 }
 async function doLogout() {
-  await apiPost('/account/logout', {})
+  await apiLogout()
   window.location.href = '/welcome'
 }
 </script>
@@ -189,6 +189,5 @@ async function doLogout() {
 .modal-title { font-size: 1rem; font-weight: 600; margin-bottom: 1.5rem; text-align: center; }
 .modal-actions { display: flex; gap: 0.75rem; justify-content: center; }
 .modal-actions :deep(.btn) { min-width: 100px; }
-.modal-actions-stack { flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
 .modal-actions-stack :deep(.btn) { min-width: 0; }
 </style>

@@ -18,7 +18,7 @@
       <label>Captcha</label>
       <div class="captcha-row">
         <input class="form-control" v-model="captcha" placeholder="Captcha code" />
-        <img :src="captchaSrc" class="captcha-img" @click="refresh" />
+        <img alt="" :src="captchaSrc" class="captcha-img" @click="refresh" />
       </div>
     </div>
     <button class="btn btn-primary btn-block" @click="submit">Change Password</button>
@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiPost } from '../composables/useFetch'
+import { changePassword, captchaImageUrl } from '../services/api'
 
 const userName = ref('')
 const oldPwd = ref('')
@@ -37,12 +37,12 @@ const captchaSrc = ref('')
 const msg = ref('')
 const msgType = ref('ok')
 
-function refresh() { captchaSrc.value = '/api/v1.0/captcha/image?_t=' + Date.now() }
+function refresh() { captchaSrc.value = captchaImageUrl() }
 onMounted(refresh)
 
 async function submit() {
   msg.value = ''
-  const data = await apiPost('/account/change-password', {
+  const data = await changePassword({
     userName: userName.value, oldPassword: oldPwd.value,
     newPassword: newPwd.value, confirmNewPassword: newPwd.value,
     captchaCode: captcha.value, button: 'login'

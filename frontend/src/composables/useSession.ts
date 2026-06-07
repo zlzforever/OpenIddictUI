@@ -4,6 +4,7 @@
 // ============================================================
 
 import { computed, ref } from 'vue'
+import { getSession } from '../services/api'
 
 interface SessionData {
   username: string | null
@@ -32,7 +33,7 @@ export function useSession() {
 
     sessionPromise = (async () => {
       try {
-        const res = await fetch('/session', { credentials: 'include' })
+        const res = await getSession()
         if (!res.ok) throw new Error('not authenticated')
         const data = await res.json()
         const rawClaims: { type: string; value: string }[] = data?.data?.claims ?? []

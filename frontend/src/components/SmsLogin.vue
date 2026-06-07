@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { apiPost } from '../composables/useFetch'
+import { sendSmsCode, loginBySms } from '../services/api'
 import SliderCaptcha from './SliderCaptcha.vue'
 
 const props = defineProps<{ returnUrl: string }>()
@@ -52,7 +52,7 @@ function startSend() {
 
 // ③ 滑动验证通过 → 自动调用发短信 API
 async function doSendCode() {
-  const data = await apiPost('/account/send-sms-code', {
+  const data = await sendSmsCode({
     phoneNumber: phone.value, countryCode: '+86', scenario: 'Login'
   }) as { code: number; message?: string }
   if (data.code !== 200) { emit('error', data.message || '发送失败'); return }
@@ -65,7 +65,7 @@ async function doSendCode() {
 async function submit() {
   emit('error', '')
   try {
-    const data = await apiPost('/account/login-by-sms', {
+    const data = await loginBySms({
       phoneNumber: phone.value, verifyCode: code.value,
       button: 'login', returnUrl: props.returnUrl || null
     }) as { data?: { location?: string }; message?: string }

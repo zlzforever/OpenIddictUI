@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { sliderInit, sliderVerify } from '../services/api'
 
 const IMG_W = 340
 const emit = defineEmits<{ verified: [] }>()
@@ -52,8 +53,8 @@ async function start() {
   visible.value = true
   try {
     loading.value = true
-    const res = await fetch('/api/v1.0/captcha/slider', { credentials: 'include' })
-    if (!res.ok) throw new Error()
+    const res = await sliderInit()
+    // if (!res.ok) throw new Error()
 
     const blob = await res.blob()
     bgImage.value = URL.createObjectURL(blob)
@@ -106,13 +107,7 @@ async function verify() {
     const track = trackRef.value
     if (!track) return
     const pxPos = Math.round((fillPercent.value / 100) * IMG_W)
-    const res = await fetch('/api/v1.0/captcha/slider/verify', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: '', position: pxPos }),
-    })
-    const data = await res.json()
+    const data = await sliderVerify(pxPos) as { success: boolean }
     if (data.success) {
       visible.value = false
       emit('verified')

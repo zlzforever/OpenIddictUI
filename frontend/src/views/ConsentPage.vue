@@ -16,7 +16,7 @@
   <div class="card" v-if="data">
     <div class="card-header"><h1>Authorization Request</h1></div>
     <div class="consent-client">
-      <img v-if="data.clientLogoUrl" :src="data.clientLogoUrl" class="consent-logo" />
+      <img alt="" v-if="data.clientLogoUrl" :src="data.clientLogoUrl" class="consent-logo" />
       <div>
         <div class="consent-client-name">{{ data.clientName }}</div>
       </div>
@@ -47,7 +47,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { apiPost, apiGet } from '../composables/useFetch'
+import { getConsent, submitConsent } from '../services/api'
 
 const route = useRoute()
 interface ScopeItem { name: string; displayName: string; checked: boolean; required: boolean }
@@ -59,7 +59,7 @@ const returnUrl = ref('')
 // ① 加载 consent 数据
 onMounted(async () => {
   try {
-    const res = (await apiGet('/api/consent/' + consentId)) as { data: ConsentData }
+    const res = (await getConsent(consentId)) as { data: ConsentData }
     data.value = res.data
     returnUrl.value = res.data.returnUrl
   } catch { data.value = null }
@@ -69,7 +69,7 @@ onMounted(async () => {
 async function submit(button: string) {
   const checkboxes = document.querySelectorAll<HTMLInputElement>('.scope-item input[type="checkbox"]:checked')
   const scopes = Array.from(checkboxes).map(c => c.value)
-  const res = (await apiPost('/api/consent/' + consentId, { button, scopesConsented: scopes })) as { data?: { location?: string } }
+  const res = (await submitConsent(consentId, { button, scopesConsented: scopes })) as { data?: { location?: string } }
   if (res.data?.location) window.location.href = res.data.location
 }
 </script>

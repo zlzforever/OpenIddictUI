@@ -16,11 +16,11 @@
 </template>
 
 <script setup lang="ts">
-import { apiPost } from '../composables/useFetch'
+import { logout } from '../services/api'
 
 async function submit() {
   // ① POST /account/logout（apiPost 自动带 XSRF token）
-  const data = await apiPost('/account/logout', {}) as { data?: { location?: string } }
+  const data = await logout() as { data?: { location?: string } }
   if (data.data?.location) {
     window.location.href = data.data.location
   } else {

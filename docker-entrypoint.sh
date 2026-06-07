@@ -28,10 +28,31 @@ generate() {
     fi
 }
 
+## api 配置文件
 if [ -z "$CONFIG_SOURCE" ]; then
     echo "环境变量 CONFIG_SOURCE 不存在， 使用默认配置文件"
 else
     generate "${CONFIG_SOURCE}" "/app/appsettings.json"
 fi
+
+if [ ! -e "/app/wwwroot/index_o.html" ]; then
+    cp /app/wwwroot/index.html /app/wwwroot/index_o.html
+fi
+cp -f /app/wwwroot/index_o.html /app/wwwroot/index.html
+
+# 注入 window.DEPLOY_BASE → 前端路由 + API 路径感知部署的子目录
+sed -i "s#window\.DEPLOY_BASE = ''#window.DEPLOY_BASE = '${BASE_PATH:-/}'#" /app/wwwroot/index.html
+
+if [ -f "/app/wwwroot/config.js" ]; then
+    generate "/app/wwwroot/config.js" "/app/wwwroot/config_g.js"
+fi
+
+version=$(md5sum /app/wwwroot/config_g.js | awk '{print $1}')
+version=${version:0:8}
+cp -f /app/wwwroot/config_g.js "/app/wwwroot/config_${version}.js"
+rm -f /app/wwwroot/config_g.js
+
+sed -i "s#/config.js#${BASE_PATH:-/}config_${version}.js#g" /app/wwwroot/index.html
+sed -i "s#/assets/index-#${BASE_PATH:-/}assets/index-#g" /app/wwwroot/index.html
 
 exec "$@"

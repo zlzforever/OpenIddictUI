@@ -10,11 +10,12 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { useSession } from '../composables/useSession'
+import { BASE_PATH } from '../utils/basePath.ts'
 
 const { load } = useSession()
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(BASE_PATH),
   routes: [
     { path: '/', redirect: '/account/login' },
     { path: '/account/login', name: 'login', component: () => import('../views/LoginPage.vue') },
