@@ -9,3 +9,4 @@
 **/logs
 *.db
 cert.pem
+appsettings.Development.json

@@ -37,6 +37,6 @@ fi
 
 # 注入 window.DEPLOY_BASE → 前端路由 + API 路径感知部署的子目录
 sed -i "s#window\.DEPLOY_BASE = ''#window.DEPLOY_BASE = '${BASE_PATH:-/}'#" /app/wwwroot/index.html
-sed -i "s#/assets/index-#${BASE_PATH:-/}assets/index-#g" /app/wwwroot/index.html
+sed -i "s#/assets/index-#${BASE_PATH:-/}/assets/index-#g" /app/wwwroot/index.html
 
 exec "$@"
