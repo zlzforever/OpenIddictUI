@@ -1,25 +1,37 @@
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
+using OpenIddictUI.Grants;
 
 namespace OpenIddictUI.Controllers;
 
 [Authorize]
 [Route("api/applications")]
-public class ApplicationsController(IOpenIddictApplicationManager applicationManager) : Controller
+public class ApplicationsController(
+    IOpenIddictApplicationManager applicationManager,
+    IEnumerable<IGrantHandler> grantHandlers) : Controller
 {
+    [HttpGet("grant-types")]
+    public IActionResult GetGrantTypes()
+        => Ok(new ApiResult
+        {
+            Data = grantHandlers.Select(handlerType => handlerType.GetType()
+                .GetField("GrantType",
+                    BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+                ?.GetValue(null) as string ?? string.Empty).Distinct().Order()
+        });
+
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        if (!IsAdmin())
-        {
-            return Unauthorized(Errors.NotAuthenticated);
-        }
+        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
         var apps = new List<object>();
         await foreach (var app in applicationManager.ListAsync())
         {
             var perms = (await applicationManager.GetPermissionsAsync(app)).ToList();
+            var settings = await applicationManager.GetSettingsAsync(app);
             apps.Add(new
             {
                 id = await applicationManager.GetIdAsync(app),
@@ -29,8 +41,11 @@ public class ApplicationsController(IOpenIddictApplicationManager applicationMan
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
                 postLogoutRedirectUris = await applicationManager.GetPostLogoutRedirectUrisAsync(app),
+                grantTypes = perms.Where(p => p.StartsWith("gt:")).Select(p => p[3..]).ToList(),
                 scopes = perms.Where(p => p.StartsWith("scp:")).Select(p => p[4..]).ToList(),
-                enabled = (await applicationManager.GetSettingsAsync(app))?.GetValueOrDefault("enabled") ?? "true"
+                clientUrl = settings?.GetValueOrDefault("client_url"),
+                clientLogoUrl = settings?.GetValueOrDefault("client_logo_url"),
+                enabled = settings?.GetValueOrDefault("enabled") ?? "true"
             });
         }
 
@@ -40,14 +55,11 @@ public class ApplicationsController(IOpenIddictApplicationManager applicationMan
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ApplicationInput input)
     {
-        if (!IsAdmin())
-        {
-            return Unauthorized(Errors.NotAuthenticated);
-        }
+        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        var err = ValidateApplicationInput(input);
+        if (err != null) return Ok(err);
         if (await applicationManager.FindByClientIdAsync(input.ClientId) != null)
-        {
             return Ok(Errors.InvalidRequest);
-        }
 
         await applicationManager.CreateAsync(BuildDescriptor(input), CancellationToken.None);
         return Ok(ApiResult.Ok("创建成功"));
@@ -56,95 +68,80 @@ public class ApplicationsController(IOpenIddictApplicationManager applicationMan
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
-        if (!IsAdmin())
-        {
-            return Unauthorized(Errors.NotAuthenticated);
-        }
+        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        var err = ValidateApplicationInput(input);
+        if (err != null) return Ok(err);
         var app = await applicationManager.FindByIdAsync(id);
-        if (app == null)
-        {
-            return Ok(Errors.UserNotExistResult);
-        }
+        if (app == null) return Ok(Errors.UserNotExistResult);
 
         var descriptor = BuildDescriptor(input);
-        // 保留非 scope 的已有权限
         foreach (var p in await applicationManager.GetPermissionsAsync(app))
-        {
-            if (!p.StartsWith("scp:"))
-            {
+            if (!p.StartsWith("scp:") && !p.StartsWith("gt:"))
                 descriptor.Permissions.Add(p);
-            }
-        }
 
         await applicationManager.UpdateAsync(app, descriptor, CancellationToken.None);
         return Ok(ApiResult.Ok("更新成功"));
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(string id)
+    private static ApiResult? ValidateApplicationInput(ApplicationInput input)
     {
-        if (!IsAdmin())
-        {
-            return Unauthorized(Errors.NotAuthenticated);
-        }
-        var app = await applicationManager.FindByIdAsync(id);
-        if (app == null)
-        {
-            return Ok(Errors.UserNotExistResult);
-        }
-        await applicationManager.DeleteAsync(app, CancellationToken.None);
-        return Ok(ApiResult.Ok("删除成功"));
+        // public 客户端不允许设置 client_secret
+        if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
+            return ApiResult.Error(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
+
+        // authorization_code grant 必须有 redirect_uri
+        if ((input.GrantTypes?.Contains("authorization_code") ?? false)
+            && (input.RedirectUris == null || input.RedirectUris.Count == 0))
+            return ApiResult.Error(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
+
+        return null;
     }
 
     private static OpenIddictApplicationDescriptor BuildDescriptor(ApplicationInput input)
     {
+        var isPublic = string.Equals(input.ClientType, "public", StringComparison.OrdinalIgnoreCase);
         var d = new OpenIddictApplicationDescriptor
         {
-            ClientId = input.ClientId, ClientSecret = input.ClientSecret,
+            ClientId = input.ClientId,
+            ClientSecret = isPublic ? null : input.ClientSecret,
             ClientType = input.ClientType ?? "confidential",
-            ConsentType = input.ConsentType ?? "implicit", DisplayName = input.DisplayName
+            ConsentType = input.ConsentType ?? "implicit",
+            DisplayName = input.DisplayName
         };
-        if (!string.IsNullOrEmpty(input.ClientUrl))
-        {
-            d.Settings["client_url"] = input.ClientUrl;
-        }
-        if (!string.IsNullOrEmpty(input.ClientLogoUrl))
-        {
-            d.Settings["client_logo_url"] = input.ClientLogoUrl;
-        }
+
+        if (!string.IsNullOrEmpty(input.ClientUrl)) d.Settings["client_url"] = input.ClientUrl;
+        if (!string.IsNullOrEmpty(input.ClientLogoUrl)) d.Settings["client_logo_url"] = input.ClientLogoUrl;
         d.Settings["enabled"] = input.Enabled ? "true" : "false";
 
-        foreach (var u in input.RedirectUris ?? [])
-        {
-            d.RedirectUris.Add(new Uri(u));
-        }
-        foreach (var u in input.PostLogoutRedirectUris ?? [])
-        {
-            d.PostLogoutRedirectUris.Add(new Uri(u));
-        }
+        foreach (var u in input.RedirectUris ?? []) d.RedirectUris.Add(new Uri(u));
+        foreach (var u in input.PostLogoutRedirectUris ?? []) d.PostLogoutRedirectUris.Add(new Uri(u));
+
+        // grant types → permissions
         foreach (var gt in input.GrantTypes ?? [])
-        {
             d.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.GrantType + gt);
-        }
+
+        // authorization_code → need response_type=code
+        if ((input.GrantTypes?.Contains("authorization_code") ?? false))
+            d.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+
+        // scopes
         foreach (var sc in input.Scopes ?? [])
-        {
             d.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + sc);
-        }
+
+        // 有 redirect_uri → add endpoint permissions
         if (input.RedirectUris is { Count: > 0 })
         {
             d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
             d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
-            d.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
         }
 
         if (input.PostLogoutRedirectUris is { Count: > 0 })
-        {
             d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
-        }
-        if (input.RequirePkce)
-        {
+
+        // public 客户端强制 PKCE
+        if (isPublic || input.RequirePkce)
             d.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
-        }
+
         return d;
     }
 

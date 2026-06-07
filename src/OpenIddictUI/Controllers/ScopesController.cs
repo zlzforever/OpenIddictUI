@@ -11,27 +11,34 @@ public class ScopesController(
     IOpenIddictScopeManager scopeManager,
     IOpenIddictApplicationManager appManager) : Controller
 {
+    private static readonly string[] ScopeOrder =
+        ["openid", "profile", "roles", "email", "phone", "address", "offline_access"];
+
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        if (!IsAdmin())
-        {
-            return Unauthorized(Errors.NotAuthenticated);
-        }
-        var scopes = new List<object>();
+        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        var scopes = new List<dynamic>();
         await foreach (var scope in scopeManager.ListAsync())
         {
+            var name = await scopeManager.GetNameAsync(scope);
             scopes.Add(new
             {
                 id = await scopeManager.GetIdAsync(scope),
-                name = await scopeManager.GetNameAsync(scope),
+                name,
+                system = ScopeOrder.Contains(name),
                 displayName = await scopeManager.GetDisplayNameAsync(scope),
                 description = await scopeManager.GetDescriptionAsync(scope),
                 resources = (await scopeManager.GetResourcesAsync(scope)).ToList()
             });
         }
 
-        return Ok(new ApiResult { Data = scopes });
+        var order = ScopeOrder.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
+        var sorted = scopes
+            .OrderBy(s => order.GetValueOrDefault((string)s.name, int.MaxValue))
+            .ThenBy(s => (string)s.name)
+            .ToList();
+        return Ok(new ApiResult { Data = sorted });
     }
 
     [HttpPost]
@@ -85,6 +92,9 @@ public class ScopesController(
         if (scope == null) return Ok(Errors.UserNotExistResult);
 
         var scopeName = await scopeManager.GetNameAsync(scope);
+        if (ScopeOrder.Contains(scopeName))
+            return Ok(ApiResult.Error(Errors.ConsentInvalidSelection, $"默认 scope '{scopeName}' 不允许删除"));
+
         var referenced = false;
         await foreach (var app in appManager.ListAsync())
         {

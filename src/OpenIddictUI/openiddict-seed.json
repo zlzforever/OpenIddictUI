@@ -2,6 +2,10 @@
   "Scopes": [
     { "Name": "openid", "DisplayName": "OpenID" },
     { "Name": "profile", "DisplayName": "Profile" },
+    { "Name": "email", "DisplayName": "Email" },
+    { "Name": "phone", "DisplayName": "Phone" },
+    { "Name": "address", "DisplayName": "Address" },
+    { "Name": "offline_access", "DisplayName": "Offline Access" },
     { "Name": "roles", "DisplayName": "Roles" },
     { "Name": "api1", "DisplayName": "API 1" },
     { "Name": "api2", "DisplayName": "API 2" }

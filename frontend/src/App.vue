@@ -5,6 +5,8 @@
   ============================================================
 -->
 <template>
+  <n-config-provider :theme-overrides="themeOverrides">
+  <n-message-provider>
   <div id="app-root">
     <nav class="navbar">
       <div class="navbar-inner">
@@ -81,13 +83,30 @@
         </div>
       </div>
     </div>
-  </div>
-</template>
+      </div>
+    </n-message-provider>
+    </n-config-provider>
+  </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useSession } from './composables/useSession'
 import { changePassword, logout as apiLogout, captchaImageUrl } from './services/api'
+
+const themeOverrides: Record<string, Record<string, string>> = {
+  common: {
+    primaryColor: '#1677ff',
+    primaryColorHover: '#4096ff',
+    primaryColorPressed: '#0958d9',
+    primaryColorSuppl: '#1677ff',
+    successColor: '#1677ff',
+    successColorHover: '#4096ff',
+    warningColor: '#fa8c16',
+    errorColor: '#ff4d4f',
+    infoColor: '#1677ff',
+    borderColor: '#e2e8f0',
+  },
+}
 
 const { username, session, load } = useSession()
 const menuOpen = ref(false)

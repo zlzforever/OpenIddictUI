@@ -101,11 +101,10 @@ public partial class Program
         });
         builder.Services.AddHybridCache();
 
-        // Grant handlers — auto-discovered via DI. Plugins: services.AddSingleton<IGrantHandler, MyHandler>().
-        builder.Services.AddKeyedSingleton<IGrantHandler, PasswordGrantHandler>(PasswordGrantHandler.GrantType);
-        builder.Services.AddKeyedSingleton<IGrantHandler, PhoneCodeGrantHandler>(PhoneCodeGrantHandler.GrantType);
-        builder.Services.AddKeyedSingleton<IGrantHandler, AuthorizationCodeGrantHandler>(
-            AuthorizationCodeGrantHandler.GrantType);
+        // Grant handlers — AddGrant<T> 同时注册 keyed（查找）和非 keyed（枚举）
+        builder.Services.AddGrant<PasswordGrantHandler>(PasswordGrantHandler.GrantType);
+        builder.Services.AddGrant<PhoneCodeGrantHandler>(PhoneCodeGrantHandler.GrantType);
+        builder.Services.AddGrant<AuthorizationCodeGrantHandler>(AuthorizationCodeGrantHandler.GrantType);
 
         builder.Services.AddSession(options =>
         {
@@ -120,7 +119,7 @@ public partial class Program
             .AddCore(options => { options.UseEntityFrameworkCore().UseDbContext<AppDbContext>(); })
             .AddServer(options =>
             {
-                options.RegisterScopes("profile");
+                options.RegisterScopes("profile", "email", "phone", "address", "roles");
 
                 options.SetAuthorizationEndpointUris("/connect/authorize")
                     .SetTokenEndpointUris("/connect/token")
