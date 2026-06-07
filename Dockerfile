@@ -17,7 +17,7 @@ RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj
 
 COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --runtime linux-x64 -c Release -o /out --no-restore
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj -c Release -o /out --no-restore
 RUN rm -rf /out/appsettings.Development.json
 
 # stage 3: 运行时
