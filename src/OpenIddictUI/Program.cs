@@ -1,5 +1,6 @@
 using Identity.Sm;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIddictUI.Data;
@@ -166,7 +167,25 @@ public partial class Program
         using var startupLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
         PluginLoader.Load(builder, startupLoggerFactory);
 
+        // 支持反向代理：读取 X-Forwarded-Proto/Host 等 header
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.All;
+            options.KnownIPNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
         var app = builder.Build();
+
+        // PathBase 处理网关下级目录部署（去尾斜杠）
+        var basePath = (config["PathBase"] ?? Environment.GetEnvironmentVariable("BASE_PATH"))?.TrimEnd('/');
+        if (!string.IsNullOrEmpty(basePath))
+        {
+            app.UsePathBase(basePath);
+        }
+
+        // 反向代理 header 处理必须在最前面
+        app.UseForwardedHeaders();
 
         if (app.Environment.IsDevelopment())
         {
