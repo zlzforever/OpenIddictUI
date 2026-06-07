@@ -128,7 +128,12 @@ public partial class Program
                 var issuer = config["OpenIddictUI:Issuer"];
                 if (!string.IsNullOrEmpty(issuer))
                 {
-                    options.SetIssuer(new Uri(issuer.TrimEnd('/')));
+                    var baseUri = new Uri(issuer.TrimEnd('/') + "/");
+                    options.SetIssuer(baseUri);
+                    // 用绝对路径覆盖 endpoint，确保 .well-known 返回完整 URL
+                    options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
+                    options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
+                    options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
                 }
 
                 options.AllowAuthorizationCodeFlow()
