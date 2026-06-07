@@ -35,9 +35,8 @@ else
     generate "${CONFIG_SOURCE}" "/app/appsettings.json"
 fi
 
-# 修复 <base href> + HTML 入口资源路径 + DEPLOY_BASE（JS 模块走相对路径，只需修 HTML）
+# 修复 <base href> + HTML 入口资源路径（JS 模块走相对路径，只需修 HTML）
 sed -i "s|<base href=\"/\">|<base href=\"${BASE_PATH:-/}\">|" /app/wwwroot/index.html
-#sed -i "s#/assets/index-#${BASE_PATH:-/}assets/index-#g" /app/wwwroot/index.html
-sed -i "s#window\.DEPLOY_BASE = ''#window.DEPLOY_BASE = '${BASE_PATH:-/}'#" /app/wwwroot/index.html
+sed -i "s#\\./assets/#${BASE_PATH:-/}assets/#g" /app/wwwroot/index.html
 
 exec "$@"

@@ -10,12 +10,13 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { useSession } from '../composables/useSession'
-import { BASE_PATH } from '../utils/basePath.ts'
+
+const base = document.querySelector('base')?.getAttribute('href') || '/'
 
 const { load } = useSession()
 
 const router = createRouter({
-  history: createWebHistory(BASE_PATH),
+  history: createWebHistory(base),
   routes: [
     { path: '/', redirect: '/account/login' },
     { path: '/account/login', name: 'login', component: () => import('../views/LoginPage.vue') },

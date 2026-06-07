@@ -8,7 +8,7 @@
   <div class="welcome-page">
     <p class="user-name" v-if="user">{{ user }}</p>
     <div class="links">
-      <a :href="`${BASE_PATH}.well-known/openid-configuration`" target="_blank">OpenID Configuration</a>
+      <a href=".well-known/openid-configuration" target="_blank">OpenID Configuration</a>
     </div>
     <pre class="claims-text">{{ claims.map(c => `${c.type}: ${c.value}`).join('\n') }}</pre>
     <div v-if="clients.length">
@@ -22,7 +22,6 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession'
-import { BASE_PATH } from '../utils/basePath'
 
 const router = useRouter()
 const { claims, clients, load } = useSession()
