@@ -134,7 +134,6 @@ public partial class Program
                     options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
                     options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
                     options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
-                    options.SetJsonWebKeySetEndpointUris(new Uri(baseUri, ".well-known/jwks"));
                 }
 
                 options.AllowAuthorizationCodeFlow()
@@ -150,6 +149,16 @@ public partial class Program
                     .EnableEndSessionEndpointPassthrough()
                     .EnableUserInfoEndpointPassthrough()
                     .DisableTransportSecurityRequirement();
+
+                // 修复 .well-known 中 jwks_uri 为正确的外部 URL
+                options.AddEventHandler<OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
+                    e.UseInlineHandler(context =>
+                    {
+                        if (!string.IsNullOrEmpty(issuer))
+                            context.Response.SetParameter("jwks_uri",
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{issuer.TrimEnd('/')}/.well-known/jwks"));
+                        return default;
+                    }));
             })
             .AddValidation(options =>
             {
