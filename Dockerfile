@@ -17,19 +17,20 @@ RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj
 
 COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj -c Release -o /out --no-restore
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --runtime linux-x64 -c Release -o /out --no-restore
+RUN rm -rf /out/appsettings.Development.json
 
 # stage 3: 运行时
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 ENV LANG zh_CN.UTF-8
+ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 RUN apt-get update &&\
     apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
-COPY --from=backend /out ./
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY TimesNewRoman.ttf /usr/share/fonts/truetype/deng/
-ENV ASPNETCORE_URLS=http://+:8080
+COPY --from=backend /out ./
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["dotnet", "OpenIddictUI.dll"]
