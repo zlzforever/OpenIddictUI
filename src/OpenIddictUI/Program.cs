@@ -134,6 +134,7 @@ public partial class Program
                     options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
                     options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
                     options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
+                    options.SetJsonWebKeySetEndpointUris(new Uri(baseUri, ".well-known/jwks"));
                 }
 
                 options.AllowAuthorizationCodeFlow()
