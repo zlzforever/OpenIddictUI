@@ -11,7 +11,7 @@
     <nav class="navbar">
       <div class="navbar-inner">
         <div class="navbar-left">
-          <a href="/" class="navbar-brand">OpenIddictUI</a>
+          <a href="." class="navbar-brand">OpenIddictUI</a>
           <span v-if="isDev" style="font-size:0.7rem;color:var(--text-muted);background:#f0f0f0;padding:1px 6px;border-radius:3px">{{ isAdmin ? 'ADMIN' : '' }}</span>
           <template v-if="isAdmin">
             <router-link to="/applications" class="nav-link nav-admin">Application</router-link>
