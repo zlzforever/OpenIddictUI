@@ -1,6 +1,5 @@
 using Identity.Sm;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIddictUI.Data;
@@ -173,15 +172,7 @@ public partial class Program
         using var startupLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
         PluginLoader.Load(builder, startupLoggerFactory);
 
-        // PathBase 处理网关下级目录部署（去尾斜杠）
-        var basePath = (config["PathBase"] ?? Environment.GetEnvironmentVariable("BASE_PATH"))?.TrimEnd('/');
-
         var app = builder.Build();
-
-        if (!string.IsNullOrEmpty(basePath))
-        {
-            app.UsePathBase(basePath);
-        }
 
         if (app.Environment.IsDevelopment())
         {
