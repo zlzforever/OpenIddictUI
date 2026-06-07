@@ -26,6 +26,8 @@ body { font-family: var(--font); color: var(--text); background: #f8fafc; min-he
 .navbar-logout-btn:hover { color: var(--error); border-color: var(--error); }
 .container { max-width: 460px; margin: 3rem auto; padding: 0 1rem; }
 @media (max-width: 500px) { .container { margin: 1rem auto; padding: 0 0.75rem; } }
+.container:has(.welcome-page), .container:has(.admin-page) { max-width: none; margin: 0; padding: 0; }
+.admin-page { padding: 1.5rem 2rem; max-width: 1100px; margin: 0 auto; background: #fff; min-height: calc(100vh - 56px); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 2rem; }
 .card-header { text-align: center; margin-bottom: 1.5rem; }
 .card-header h1 { font-size: 1.5rem; font-weight: 700; }

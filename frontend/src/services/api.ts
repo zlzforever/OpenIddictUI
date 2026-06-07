@@ -2,7 +2,7 @@
  * API 统一入口：所有接口路径集中管理
  * 使用相对路径（不带 /），由 <base href> 自动处理网关下级目录
  */
-import { apiPost, apiGet } from '../composables/useFetch'
+import { apiPost, apiGet, apiPut, apiDelete } from '../composables/useFetch'
 
 export async function login(body: Record<string, unknown>) {
   return apiPost('account/login', body) as Promise<{ code: number; message?: string; data?: { location?: string } }>
@@ -46,4 +46,31 @@ export async function getConsent(id: string) {
 
 export async function submitConsent(id: string, body: Record<string, unknown>) {
   return apiPost(`api/consent/${id}`, body) as Promise<{ data?: { location?: string } }>
+}
+
+// ---- Admin: Applications & Scopes ----
+export async function getApplications() {
+  return apiGet('api/applications') as Promise<{ data: unknown[] }>
+}
+
+export async function saveApplication(body: Record<string, unknown>, id?: string) {
+  if (id) return apiPut(`api/applications/${id}`, body) as Promise<{ code: number; message?: string }>
+  return apiPost('api/applications', body) as Promise<{ code: number; message?: string }>
+}
+
+export async function deleteApplication(id: string) {
+  return apiDelete(`api/applications/${id}`) as Promise<{ code: number; message?: string }>
+}
+
+export async function getScopes() {
+  return apiGet('api/scopes') as Promise<{ data: unknown[] }>
+}
+
+export async function saveScope(body: Record<string, unknown>, id?: string) {
+  if (id) return apiPut(`api/scopes/${id}`, body) as Promise<{ code: number; message?: string }>
+  return apiPost('api/scopes', body) as Promise<{ code: number; message?: string }>
+}
+
+export async function deleteScope(id: string) {
+  return apiDelete(`api/scopes/${id}`) as Promise<{ code: number; message?: string }>
 }

@@ -53,3 +53,24 @@ export async function apiGet(url: string): Promise<unknown> {
   const res = await fetch(url, { credentials: 'include' })
   return res.json()
 }
+
+export async function apiPut(url: string, body: Record<string, unknown>): Promise<unknown> {
+  const token = await ensureToken()
+  const res = await fetch(url, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token },
+    body: JSON.stringify(body)
+  })
+  return res.json()
+}
+
+export async function apiDelete(url: string): Promise<unknown> {
+  const token = await ensureToken()
+  const res = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }
+  })
+  return res.json()
+}

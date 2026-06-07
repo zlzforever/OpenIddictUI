@@ -10,7 +10,16 @@
       <div class="navbar-inner">
         <div class="navbar-left">
           <a href="/" class="navbar-brand">OpenIddictUI</a>
-          <a href="http://localhost:5175" target="_blank" class="nav-link">SPA Client</a>
+          <span v-if="isDev" style="font-size:0.7rem;color:var(--text-muted);background:#f0f0f0;padding:1px 6px;border-radius:3px">{{ isAdmin ? 'ADMIN' : '' }}</span>
+          <template v-if="isAdmin">
+            <router-link to="/applications" class="nav-link nav-admin">Application</router-link>
+            <router-link to="/scopes" class="nav-link nav-admin">Scope</router-link>
+          </template>
+          <template v-if="username">
+            <router-link to="/authorizations" class="nav-link nav-admin">Authorizations</router-link>
+          </template>
+          <a v-if="isDev" href="http://localhost:5175" target="_blank" class="nav-link">SPA Client</a>
+          <span class="navbar-spacer"></span>
         </div>
         <!-- 已登录时显示用户名 + 下拉菜单 -->
         <div class="navbar-user" v-if="username">
@@ -76,13 +85,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useSession } from './composables/useSession'
 import { changePassword, logout as apiLogout, captchaImageUrl } from './services/api'
 
-const { username, load } = useSession()
+const { username, session, load } = useSession()
 const menuOpen = ref(false)
 const showLogoutModal = ref(false)
+const isDev = import.meta.env.DEV
+const isAdmin = computed(() => {
+  const u = username.value
+  const c = session.value.claims
+  // username 是 "admin"，或任意 claim 值为 "admin"
+  return u === 'admin' || c.some(x => x.value === 'admin')
+})
 
 // 修改密码表单
 const showPwdModal = ref(false)
@@ -96,7 +112,9 @@ const pwdOk = ref(false)
 
 // 预加载 session 数据：router 守卫也会调用 load()
 // 由于 useSession 内部已做并发去重，两个调用共享同一请求，不会重复
-onMounted(load)
+onMounted(async () => {
+  await load()
+})
 
 function onDocClick() { menuOpen.value = false }
 onMounted(() => document.addEventListener('click', onDocClick))
@@ -173,6 +191,15 @@ async function doLogout() {
 .navbar-menu-item { padding: 0.5rem 1rem; font-size: 0.875rem; cursor: pointer; }
 .navbar-menu-item:hover { background: #f8fafc; }
 .navbar-menu-divider { height: 1px; background: var(--border); margin: 0.25rem 0; }
+
+/* 后台管理导航链接 */
+.nav-admin {
+  width: 100px; text-align: center; padding: 0.375rem 0; border-radius: var(--radius);
+  transition: background 0.15s, color 0.15s;
+}
+.nav-admin:hover { background: rgba(37,99,235,0.08); color: var(--primary) !important; }
+.nav-admin.router-link-exact-active { background: rgba(37,99,235,0.12); color: var(--primary) !important; font-weight: 600; }
+.navbar-spacer { flex: 1; }
 
 /* 模态框 */
 .modal-overlay {

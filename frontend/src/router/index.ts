@@ -29,6 +29,9 @@ const router = createRouter({
     { path: '/change-password', name: 'change-password', component: () => import('../views/ChangePasswordPage.vue') },
     { path: '/grants', name: 'grants', component: () => import('../views/GrantsPage.vue') },
     { path: '/redirect', name: 'redirect', component: () => import('../views/RedirectPage.vue') },
+    { path: '/applications', name: 'applications', component: () => import('../views/ApplicationPage.vue') },
+    { path: '/scopes', name: 'scopes', component: () => import('../views/ScopePage.vue') },
+    { path: '/authorizations', name: 'authorizations', component: () => import('../views/AuthorizationPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/not-found' },
   ],
 })
@@ -61,7 +64,8 @@ router.beforeEach(async (to) => {
     const data = await load()
     if (data.username)
     {
-      return to.path !== '/welcome' ? { path: '/welcome' } : undefined
+      // 已登录用户在登录页 → 跳转 welcome；其他页面直接放行
+      return to.path === '/account/login' ? { path: '/welcome' } : undefined
     }
   }
   catch { /* 网络异常，走未登录流程 */ }

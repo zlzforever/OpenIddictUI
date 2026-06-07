@@ -186,5 +186,6 @@ public class ConsentEntry
 public class ConsentInput
 {
     public string[]? ScopesConsented { get; set; }
+    [StringLength(10)]
     public string? Button { get; set; }
 }
