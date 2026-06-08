@@ -120,10 +120,38 @@ public partial class Program
             .AddServer(options =>
             {
                 options.RegisterScopes("profile", "email", "phone", "address", "roles");
-
                 options.SetAuthorizationEndpointUris("/connect/authorize")
                     .SetTokenEndpointUris("/connect/token")
                     .SetEndSessionEndpointUris("/connect/logout");
+
+                var issuer = config["OpenIddictUI:Issuer"];
+                if (!string.IsNullOrEmpty(issuer))
+                {
+                    var baseUrl = issuer.TrimEnd('/');
+                    options.SetIssuer(new Uri(baseUrl));
+                    // 修复 discovery document 中的 endpoint URL，设置为外部 issuer
+                    options
+                        .AddEventHandler<
+                            OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
+                            e.UseInlineHandler(context =>
+                            {
+                              
+                                context.Response["issuer"] = new OpenIddict.Abstractions.OpenIddictParameter(baseUrl);
+                                context.Response["authorization_endpoint"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/authorize");
+                                context.Response["token_endpoint"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/token");
+                                context.Response["end_session_endpoint"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/logout");
+                                context.Response["jwks_uri"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/.well-known/jwks");
+                                return default;
+                            }));
+                    // 一次性设置 returnUrl 白名单前缀，后续请求不再拼接
+                    Util.AuthorizePrefix = string.IsNullOrEmpty(issuer)
+                        ? "/connect/authorize?"
+                        : $"{baseUrl}/connect/authorize?";
+                }
 
                 options.AllowAuthorizationCodeFlow()
                     .AllowPasswordFlow()
@@ -138,27 +166,6 @@ public partial class Program
                     .EnableEndSessionEndpointPassthrough()
                     .EnableUserInfoEndpointPassthrough()
                     .DisableTransportSecurityRequirement();
-
-                var issuer = config["OpenIddictUI:Issuer"];
-                if (string.IsNullOrEmpty(issuer))
-                {
-                    return;
-                }
-
-                Util.AuthorizePrefix = $"{issuer.TrimEnd('/')}/connect/authorize?";
-                // 修复 .well-known 中 jwks_uri 为正确的外部 URL
-                options
-                    .AddEventHandler<
-                        OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
-                        e.UseInlineHandler(_ =>
-                        {
-                            var baseUri = new Uri(issuer.TrimEnd('/') + "/");
-                            options.SetIssuer(baseUri);
-                            options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
-                            options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
-                            options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
-                            return default;
-                        }));
             })
             .AddValidation(options =>
             {
