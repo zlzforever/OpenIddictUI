@@ -166,6 +166,7 @@ public partial class Program
                     .EnableAuthorizationEndpointPassthrough()
                     .EnableTokenEndpointPassthrough()
                     .EnableEndSessionEndpointPassthrough()
+                    .EnableUserInfoEndpointPassthrough()
                     .DisableTransportSecurityRequirement();
             })
             .AddValidation(options =>
@@ -215,6 +216,20 @@ public partial class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.Map("connect/userinfo", async (HttpContext ctx) =>
+        {
+            if (ctx.User.Identity?.IsAuthenticated != true)
+            {
+                ctx.Response.StatusCode = 401;
+                return;
+            }
+
+            var claims = ctx.User.Claims
+                .GroupBy(c => c.Type)
+                .ToDictionary(g => g.Key, g => g.Count() > 1 ? g.Select(c => c.Value).ToArray() : (object)g.First().Value);
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsJsonAsync(claims);
+        });
         app.MapFallbackToFile("index.html");
 
         var inDapr = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DAPR_HTTP_PORT"));
