@@ -20,7 +20,7 @@ public class OidcFlowTests
 
     static OidcFlowTests()
     {
-        BaseUrl = "https://sample.ptkj.cc";
+        BaseUrl = Environment.GetEnvironmentVariable("OPENIDDICT_TEST_URL") ?? "http://localhost:5164";
         var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = true };
         Client = new HttpClient(handler) { BaseAddress = new Uri(BaseUrl) };
     }
@@ -127,9 +127,9 @@ public class OidcFlowTests
         => Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private const string TestUser = "admin";
-    private const string TestPassword = "1qazZAQ!";
-    private const string TestClient = "spa-client";
-    private const string TestRedirect = "http://localhost:5175/signin-redirect-callback";
+    private const string TestPassword = "Admin@2023";
+    private const string TestClient = "sample-app";
+    private static readonly string TestRedirect = $"{BaseUrl}/wildgoose/signin-oidc";
 
     private class CsrfData
     {

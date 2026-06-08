@@ -145,6 +145,8 @@ public partial class Program
                                     new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/logout");
                                 context.Response["jwks_uri"] =
                                     new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/.well-known/jwks");
+                                context.Response["userinfo_endpoint"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/userinfo");
                                 return default;
                             }));
                     // 一次性设置 returnUrl 白名单前缀，后续请求不再拼接
