@@ -19,6 +19,7 @@ COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
 RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj -c Release -o /out --no-restore
 RUN rm -rf /out/appsettings.Development.json
+RUN if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux-x64' -exec rm -rf {} +; fi
 
 # stage 3: 运行时
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
