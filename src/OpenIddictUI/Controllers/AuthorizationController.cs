@@ -264,6 +264,43 @@ public class AuthorizationController(
         return await handler.ExecuteAsync(request, HttpContext, CancellationToken.None);
     }
 
+    [HttpGet("userinfo")]
+    public async Task GetUserInfo()
+    {
+        if (HttpContext.User.Identity?.IsAuthenticated != true)
+        {
+            HttpContext.Response.StatusCode = 401;
+            return;
+        }
+
+        var dictionary = new Dictionary<string, object>();
+        foreach (var claim in HttpContext.User.Claims)
+        {
+            // 优先使用映射后的 JWT 短名称，没有映射就用原始名称
+            var key = Util.JwtClaimMappings.TryGetValue(claim.Type, out var jwtKey) ? jwtKey : claim.Type;
+
+            // 处理多值 Claim（如多个角色）
+            if (dictionary.TryGetValue(key, out var existing))
+            {
+                if (existing is List<object> list)
+                {
+                    list.Add(claim.Value);
+                }
+                else
+                {
+                    dictionary[key] = new List<object> { existing, claim.Value };
+                }
+            }
+            else
+            {
+                dictionary[key] = claim.Value;
+            }
+        }
+
+        HttpContext.Response.ContentType = "application/json";
+        await HttpContext.Response.WriteAsJsonAsync(dictionary);
+    }
+
     /// <summary>
     /// 获取当前请求的完整 URI（用于 returnUrl 参数）
     /// </summary>
