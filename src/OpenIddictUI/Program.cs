@@ -125,17 +125,6 @@ public partial class Program
                     .SetTokenEndpointUris("/connect/token")
                     .SetEndSessionEndpointUris("/connect/logout");
 
-                var issuer = config["OpenIddictUI:Issuer"];
-                if (!string.IsNullOrEmpty(issuer))
-                {
-                    var baseUri = new Uri(issuer.TrimEnd('/') + "/");
-                    options.SetIssuer(baseUri);
-                    // 用绝对路径覆盖 endpoint，确保 .well-known 返回完整 URL
-                    options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
-                    options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
-                    options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
-                }
-
                 options.AllowAuthorizationCodeFlow()
                     .AllowPasswordFlow()
                     .AllowRefreshTokenFlow();
@@ -154,9 +143,22 @@ public partial class Program
                 options.AddEventHandler<OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
                     e.UseInlineHandler(context =>
                     {
+                        var issuer = config["OpenIddictUI:Issuer"];
                         if (!string.IsNullOrEmpty(issuer))
+                        {
+                            var baseUri = new Uri(issuer.TrimEnd('/'));
+                            context.Response.SetParameter("issuer",
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/"));
+                            context.Response.SetParameter("authorization_endpoint",
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/authorize"));
+                            context.Response.SetParameter("token_endpoint",
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/token"));
+                            context.Response.SetParameter("end_session_endpoint",
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/logout"));
                             context.Response.SetParameter("jwks_uri",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{issuer.TrimEnd('/')}/.well-known/jwks"));
+                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/.well-known/jwks"));
+                        }
+
                         return default;
                     }));
             })
