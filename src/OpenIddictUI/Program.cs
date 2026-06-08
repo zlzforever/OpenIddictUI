@@ -139,28 +139,26 @@ public partial class Program
                     .EnableUserInfoEndpointPassthrough()
                     .DisableTransportSecurityRequirement();
 
-                // 修复 .well-known 中 jwks_uri 为正确的外部 URL
-                options.AddEventHandler<OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
-                    e.UseInlineHandler(context =>
-                    {
-                        var issuer = config["OpenIddictUI:Issuer"];
-                        if (!string.IsNullOrEmpty(issuer))
-                        {
-                            var baseUri = new Uri(issuer.TrimEnd('/'));
-                            context.Response.SetParameter("issuer",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/"));
-                            context.Response.SetParameter("authorization_endpoint",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/authorize"));
-                            context.Response.SetParameter("token_endpoint",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/token"));
-                            context.Response.SetParameter("end_session_endpoint",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/connect/logout"));
-                            context.Response.SetParameter("jwks_uri",
-                                new OpenIddict.Abstractions.OpenIddictParameter($"{baseUri}/.well-known/jwks"));
-                        }
+                var issuer = config["OpenIddictUI:Issuer"];
+                if (string.IsNullOrEmpty(issuer))
+                {
+                    return;
+                }
 
-                        return default;
-                    }));
+                Util.AuthorizePrefix = $"{issuer.TrimEnd('/')}/connect/authorize?";
+                // 修复 .well-known 中 jwks_uri 为正确的外部 URL
+                options
+                    .AddEventHandler<
+                        OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
+                        e.UseInlineHandler(_ =>
+                        {
+                            var baseUri = new Uri(issuer.TrimEnd('/') + "/");
+                            options.SetIssuer(baseUri);
+                            options.SetAuthorizationEndpointUris(new Uri(baseUri, "connect/authorize"));
+                            options.SetTokenEndpointUris(new Uri(baseUri, "connect/token"));
+                            options.SetEndSessionEndpointUris(new Uri(baseUri, "connect/logout"));
+                            return default;
+                        }));
             })
             .AddValidation(options =>
             {

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using OpenIddictUI.Grants;
 
 namespace OpenIddictUI.Extensions;

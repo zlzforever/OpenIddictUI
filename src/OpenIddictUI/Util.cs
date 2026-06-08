@@ -11,4 +11,5 @@ public static class Util
     public const string PhoneNumberTokenProvider = "PhoneNumberTokenProvider";
     public const string PurposeLogin = "Login";
     public const string PurposeRegister = "Register";
+    public static string AuthorizePrefix = "/connect/authorize?";
 }

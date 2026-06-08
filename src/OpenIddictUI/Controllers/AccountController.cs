@@ -47,7 +47,7 @@ public class AccountController(
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
-        if (!string.IsNullOrWhiteSpace(model.ReturnUrl) && !model.ReturnUrl.StartsWith("/connect/authorize?"))
+        if (!IsValidReturnUrl(model.ReturnUrl))
         {
             return Ok(Errors.InvalidRequest);
         }
@@ -117,7 +117,7 @@ public class AccountController(
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
-        if (!string.IsNullOrWhiteSpace(model.ReturnUrl) && !model.ReturnUrl.StartsWith("/connect/authorize?"))
+        if (!IsValidReturnUrl(model.ReturnUrl))
         {
             return Ok(Errors.InvalidRequest);
         }
@@ -457,6 +457,11 @@ public class AccountController(
         {
             return false;
         }
+    }
+
+    private bool IsValidReturnUrl(string? returnUrl)
+    {
+        return string.IsNullOrWhiteSpace(returnUrl) || returnUrl.StartsWith(Util.AuthorizePrefix);
     }
 
     private IActionResult CsrfError() => BadRequest(Errors.InvalidAntiForgery);
