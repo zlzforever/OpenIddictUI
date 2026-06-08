@@ -8,7 +8,7 @@
     <n-data-table :columns="columns" :data="apps" :bordered="true" size="small" :pagination="false" />
 
     <n-modal :show="showModal" :title="editing ? '编辑 Application' : '添加 Application'" @update:show="showModal=$event"
-      preset="card" style="width:720px;min-height:520px" :mask-closable="false" @positive-click="handleSave" positive-text="保存">
+      preset="card" style="width:720px;min-height:520px" :mask-closable="false">
       <n-form label-placement="top" size="small">
         <n-tabs type="segment" animated style="min-height:440px">
           <n-tab-pane name="basic" tab="Basic">
@@ -31,16 +31,12 @@
           </n-tab-pane>
           <n-tab-pane name="grants" tab="Grants">
             <n-checkbox-group v-model:value="form.selectedGrantTypes">
-              <n-space>
-                <n-checkbox v-for="gt in availableGrantTypes" :key="gt" :value="gt" :label="gt" />
-              </n-space>
+              <n-space><n-checkbox v-for="gt in availableGrantTypes" :key="gt" :value="gt" :label="gt" /></n-space>
             </n-checkbox-group>
           </n-tab-pane>
           <n-tab-pane name="scopes" tab="Scopes">
             <n-checkbox-group v-model:value="form.selectedScopes">
-              <n-space>
-                <n-checkbox v-for="s in allScopes" :key="s.name" :value="s.name" :label="s.displayName||s.name" />
-              </n-space>
+              <n-space><n-checkbox v-for="s in allScopes" :key="s.name" :value="s.name" :label="s.displayName||s.name" /></n-space>
             </n-checkbox-group>
           </n-tab-pane>
           <n-tab-pane name="uris" tab="URIs">
@@ -53,6 +49,12 @@
           </n-tab-pane>
         </n-tabs>
       </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showModal=false">取消</n-button>
+          <n-button type="primary" @click="handleSave">保存</n-button>
+        </n-space>
+      </template>
     </n-modal>
   </div>
 </template>

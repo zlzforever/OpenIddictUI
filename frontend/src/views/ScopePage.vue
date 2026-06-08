@@ -8,12 +8,18 @@
     <n-data-table :columns="columns" :data="scopes" :bordered="true" size="small" :pagination="false" />
 
     <n-modal :show="showModal" :title="editing ? '编辑 Scope' : '添加 Scope'" @update:show="showModal=$event"
-      preset="card" style="width:500px" :mask-closable="false" @positive-click="handleSave" positive-text="保存">
+      preset="card" style="width:500px" :mask-closable="false">
       <n-form label-placement="top" size="small">
         <n-form-item label="Name"><n-input v-model:value="form.name" :disabled="editing" /></n-form-item>
         <n-form-item label="DisplayName"><n-input v-model:value="form.displayName" /></n-form-item>
         <n-form-item label="Description"><n-input v-model:value="form.description" /></n-form-item>
       </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showModal=false">取消</n-button>
+          <n-button type="primary" @click="handleSave">保存</n-button>
+        </n-space>
+      </template>
     </n-modal>
   </div>
 </template>
