@@ -101,11 +101,7 @@ public class AuthorizationController(
                     }));
             }
 
-            // 用户未登录 → 302 跳转到登录页（Challenge 自动把 RedirectUri 作为 ReturnUrl 参数拼接）
-            return Challenge(new AuthenticationProperties
-            {
-                RedirectUri = GetRequestUri()
-            });
+            return RedirectToLogin(GetRequestUri());
         }
 
         // ④ 从认证结果中获取当前用户实体
@@ -137,20 +133,14 @@ public class AuthorizationController(
                     }));
             }
 
-            return Challenge(new AuthenticationProperties
-            {
-                RedirectUri = GetRequestUri()
-            });
+            return RedirectToLogin(GetRequestUri());
         }
 
         // ⑥ 处理 prompt=login — 强制重新认证：先清除当前会话，再跳转登录页
         if (request.HasPromptValue(PromptValues.Login))
         {
             await HttpContext.SignOutAsync();
-            return Challenge(new AuthenticationProperties
-            {
-                RedirectUri = GetRequestUri()
-            });
+            return RedirectToLogin(GetRequestUri());
         }
 
         // ⑦ 检查授权同意（Consent）类型
@@ -278,7 +268,20 @@ public class AuthorizationController(
     /// 获取当前请求的完整 URI（用于 returnUrl 参数）
     /// </summary>
     private string GetRequestUri()
-        => Request.PathBase + Request.Path + Request.QueryString;
+    {
+        var path = Request.PathBase + Request.Path + Request.QueryString;
+        var issuer = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["OpenIddictUI:Issuer"];
+        return !string.IsNullOrEmpty(issuer) ? $"{issuer.TrimEnd('/')}{path}" : path;
+    }
+
+    private RedirectResult RedirectToLogin(string returnUrl)
+    {
+        var issuer = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["OpenIddictUI:Issuer"];
+        var loginUrl = string.IsNullOrEmpty(issuer)
+            ? "/account/login"
+            : $"{issuer.TrimEnd('/')}/account/login";
+        return Redirect($"{loginUrl}?returnUrl={Uri.EscapeDataString(returnUrl)}");
+    }
 
     /// <summary>
     /// 决定每个 claim 的目标 token 类型
