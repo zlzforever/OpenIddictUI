@@ -10,11 +10,11 @@ public static class HttpContextExtensions
     /// </summary>
     public static async Task<bool> CheckCaptchaAsync(this HttpContext httpContext, HybridCache cache, string? captcha)
     {
-        // var env = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
-        // if (env.IsDevelopment())
-        // {
-        //     return true;
-        // }
+        var env = httpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+        if (env.IsDevelopment())
+        {
+            return true;
+        }
         var captchaId = httpContext.Request.Cookies[Util.CaptchaId];
         if (string.IsNullOrEmpty(captchaId))
         {

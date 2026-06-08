@@ -6,6 +6,7 @@
     <File Path="Dockerfile" />
     <File Path=".dockerignore" />
     <File Path="readme.md" />
+    <File Path="test-oidc.sh" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/OpenIddictUI.Api/OpenIddictUI.Api.csproj" />

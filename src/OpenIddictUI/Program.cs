@@ -164,7 +164,6 @@ public partial class Program
                     .EnableAuthorizationEndpointPassthrough()
                     .EnableTokenEndpointPassthrough()
                     .EnableEndSessionEndpointPassthrough()
-                    .EnableUserInfoEndpointPassthrough()
                     .DisableTransportSecurityRequirement();
             })
             .AddValidation(options =>
