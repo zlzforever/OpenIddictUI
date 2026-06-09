@@ -38,6 +38,7 @@ public class ApplicationsController(
                 clientId = await applicationManager.GetClientIdAsync(app),
                 displayName = await applicationManager.GetDisplayNameAsync(app),
                 clientType = await applicationManager.GetClientTypeAsync(app) ?? "confidential",
+                applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
                 postLogoutRedirectUris = await applicationManager.GetPostLogoutRedirectUrisAsync(app),
@@ -85,14 +86,23 @@ public class ApplicationsController(
 
     private static ApiResult? ValidateApplicationInput(ApplicationInput input)
     {
-        // public 客户端不允许设置 client_secret
-        if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
-            return ApiResult.Error(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
+        var err = (int code, string msg) => ApiResult.Error(code, msg);
 
-        // authorization_code grant 必须有 redirect_uri
-        if ((input.GrantTypes?.Contains("authorization_code") ?? false)
-            && (input.RedirectUris == null || input.RedirectUris.Count == 0))
-            return ApiResult.Error(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
+        if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
+            return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
+
+        if (input.ClientType == "confidential" && string.IsNullOrEmpty(input.ClientSecret) && string.IsNullOrEmpty(input.JsonWebKeySet))
+            return err(Errors.InvalidRequest.Code, "confidential 客户端必须设置 ClientSecret 或 JWKS");
+
+        if (input.GrantTypes?.Contains("authorization_code") == true && (input.RedirectUris == null || input.RedirectUris.Count == 0))
+            return err(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
+
+        if (input.AccessTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "AccessTokenLifetime 必须大于 0");
+        if (input.AuthorizationCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "AuthorizationCodeLifetime 必须大于 0");
+        if (input.RefreshTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "RefreshTokenLifetime 必须大于 0");
+        if (input.IdentityTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "IdentityTokenLifetime 必须大于 0");
+        if (input.DeviceCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "DeviceCodeLifetime 必须大于 0");
+        if (input.UserCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "UserCodeLifetime 必须大于 0");
 
         return null;
     }
@@ -106,11 +116,13 @@ public class ApplicationsController(
             ClientSecret = isPublic ? null : input.ClientSecret,
             ClientType = input.ClientType ?? "confidential",
             ConsentType = input.ConsentType ?? "implicit",
-            DisplayName = input.DisplayName
+            DisplayName = input.DisplayName,
+            ApplicationType = input.ApplicationType ?? "web"
         };
 
         if (!string.IsNullOrEmpty(input.ClientUrl)) d.Settings["client_url"] = input.ClientUrl;
         if (!string.IsNullOrEmpty(input.ClientLogoUrl)) d.Settings["client_logo_url"] = input.ClientLogoUrl;
+        if (!string.IsNullOrEmpty(input.JsonWebKeySet)) d.Settings["jwks_json"] = input.JsonWebKeySet;
         d.Settings["enabled"] = input.Enabled ? "true" : "false";
 
         foreach (var u in input.RedirectUris ?? []) d.RedirectUris.Add(new Uri(u));
@@ -142,6 +154,14 @@ public class ApplicationsController(
         if (isPublic || input.RequirePkce)
             d.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
 
+        // Token lifetimes (seconds → TimeSpan)
+        if (input.AccessTokenLifetime.HasValue) d.SetAccessTokenLifetime(TimeSpan.FromSeconds(input.AccessTokenLifetime.Value));
+        if (input.AuthorizationCodeLifetime.HasValue) d.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(input.AuthorizationCodeLifetime.Value));
+        if (input.RefreshTokenLifetime.HasValue) d.SetRefreshTokenLifetime(TimeSpan.FromSeconds(input.RefreshTokenLifetime.Value));
+        if (input.IdentityTokenLifetime.HasValue) d.SetIdentityTokenLifetime(TimeSpan.FromSeconds(input.IdentityTokenLifetime.Value));
+        if (input.DeviceCodeLifetime.HasValue) d.SetDeviceCodeLifetime(TimeSpan.FromSeconds(input.DeviceCodeLifetime.Value));
+        if (input.UserCodeLifetime.HasValue) d.SetUserCodeLifetime(TimeSpan.FromSeconds(input.UserCodeLifetime.Value));
+
         return d;
     }
 
@@ -161,6 +181,14 @@ public class ApplicationInput
     public List<string>? Scopes { get; set; }
     [StringLength(512)] public string? ClientUrl { get; set; }
     [StringLength(512)] public string? ClientLogoUrl { get; set; }
+    [StringLength(20)] public string? ApplicationType { get; set; }
+    public string? JsonWebKeySet { get; set; }
+    public int? AccessTokenLifetime { get; set; }
+    public int? AuthorizationCodeLifetime { get; set; }
+    public int? RefreshTokenLifetime { get; set; }
+    public int? IdentityTokenLifetime { get; set; }
+    public int? DeviceCodeLifetime { get; set; }
+    public int? UserCodeLifetime { get; set; }
     public bool RequirePkce { get; set; }
     public bool Enabled { get; set; } = true;
 }
