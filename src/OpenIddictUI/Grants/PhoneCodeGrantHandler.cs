@@ -74,15 +74,18 @@ public class PhoneCodeGrantHandler : BaseGrantHandler
         }
 
         var principal = await signInManager.CreateUserPrincipalAsync(user);
+        principal.SetClaim(Claims.Subject, await userManager.GetUserIdAsync(user));
         principal.SetScopes(request.GetScopes());
-        principal.SetResources(await scopeManager.ListResourcesAsync(principal.GetScopes(), cancellationToken)
-            .ToListAsync(cancellationToken: cancellationToken));
+        principal.SetResources(await scopeManager
+            .ListResourcesAsync(principal.GetScopes(), cancellationToken).
+            ToListAsync(cancellationToken: cancellationToken));
+
+        // SetDestinations 决定每个 claim 出现在哪种 token 中（AccessToken / IdentityToken / 两者）
         foreach (var c in principal.Claims)
         {
             c.SetDestinations(GetDestinations(c));
         }
-
-        principal.SetClaim(Claims.AuthenticationMethodReference, "phone_code");
+        principal.SetClaim(OpenIddictConstants.Claims.AuthenticationMethodReference, "phone_code");
 
         logger.LogInformation("Phone grant: success for {Phone}", phoneNumber);
         return Success(principal);

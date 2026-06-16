@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
@@ -58,13 +59,19 @@ public class PasswordGrantHandler : BaseGrantHandler
         }
 
         var principal = await signInManager.CreateUserPrincipalAsync(user);
+        principal.RemoveClaims(ClaimTypes.NameIdentifier);
+        principal.SetClaim(OpenIddictConstants.Claims.Subject, await userManager.GetUserIdAsync(user));
         principal.SetScopes(request.GetScopes());
-        principal.SetResources(await scopeManager.ListResourcesAsync(principal.GetScopes(), cancellationToken)
-            .ToListAsync(cancellationToken: cancellationToken));
+        principal.SetResources(await scopeManager
+            .ListResourcesAsync(principal.GetScopes(), cancellationToken).
+            ToListAsync(cancellationToken: cancellationToken));
+
+        // SetDestinations 决定每个 claim 出现在哪种 token 中（AccessToken / IdentityToken / 两者）
         foreach (var c in principal.Claims)
         {
             c.SetDestinations(GetDestinations(c));
         }
+        principal.SetClaim(OpenIddictConstants.Claims.AuthenticationMethodReference, "password");
 
         logger.LogInformation("Password grant: success for {Username}", request.Username);
         return Success(principal);
