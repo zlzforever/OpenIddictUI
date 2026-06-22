@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -265,14 +266,9 @@ public class AuthorizationController(
     }
 
     [HttpGet("userinfo")]
+    [Authorize]
     public async Task GetUserInfo()
     {
-        if (HttpContext.User.Identity?.IsAuthenticated != true)
-        {
-            HttpContext.Response.StatusCode = 401;
-            return;
-        }
-
         var dictionary = new Dictionary<string, object>();
         foreach (var claim in HttpContext.User.Claims)
         {
