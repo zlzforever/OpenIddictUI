@@ -22,16 +22,16 @@
         <PackageReference Include="SkiaSharp" Version="3.119.4"/>
         <PackageReference Include="Identity.Sm" Version="1.0.1"/>
         <PackageReference Include="AlibabaCloud.SDK.Dysmsapi20170525" Version="2.0.24"/>
-        <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
-        <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
+        <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1"/>
+        <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0"/>
         <PackageReference Include="Serilog.Expressions" Version="4.0.0"/>
-        <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+        <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0"/>
         <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0"/>
-        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4"/>
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="logs\" />
+        <Folder Include="logs\"/>
     </ItemGroup>
 
 </Project>

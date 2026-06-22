@@ -1,12 +1,11 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using OpenIddict.Server.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Hybrid;
 using OpenIddict.Abstractions;
-using OpenIddict.Server.AspNetCore;
 using OpenIddictUI.Grants;
 using OpenIddictUI.Identity;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -268,20 +267,20 @@ public class AuthorizationController(
     [HttpGet("userinfo")]
     public async Task GetUserInfo()
     {
-        var authenticateResult = await HttpContext.AuthenticateAsync();
-        if (authenticateResult.Succeeded == false)
+        // Passthrough 模式下 OpenIddict 已验证 token，调 AuthenticateAsync 拿到 principal
+        var auth = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        if (!auth.Succeeded)
         {
-            logger.LogWarning("Authorize: unsuccessful authentication, {Message}", authenticateResult.Failure?.Message);
+            logger.LogWarning("UserInfo: not authenticated, {Message}", auth.Failure?.Message);
             HttpContext.Response.StatusCode = 401;
             return;
         }
 
         var dictionary = new Dictionary<string, object>();
-        foreach (var claim in HttpContext.User.Claims)
+        foreach (var claim in auth.Principal.Claims)
         {
             // 优先使用映射后的 JWT 短名称，没有映射就用原始名称
             var key = Util.JwtClaimMappings.TryGetValue(claim.Type, out var jwtKey) ? jwtKey : claim.Type;
-
             // 处理多值 Claim（如多个角色）
             if (dictionary.TryGetValue(key, out var existing))
             {

@@ -123,14 +123,15 @@ public partial class Program
                 options.RegisterScopes("profile", "email", "phone", "address", "roles");
                 options.SetAuthorizationEndpointUris("/connect/authorize")
                     .SetTokenEndpointUris("/connect/token")
-                    .SetEndSessionEndpointUris("/connect/logout");
+                    .SetEndSessionEndpointUris("/connect/logout")
+                    .SetUserInfoEndpointUris("/connect/userinfo");
 
                 var issuer = config["OpenIddictUI:Issuer"];
                 if (!string.IsNullOrEmpty(issuer))
                 {
                     var baseUrl = issuer.TrimEnd('/');
                     options.SetIssuer(new Uri(baseUrl));
-                    // 修复 discovery document 中的 endpoint URL，设置为外部 issuer
+                    // 只在 discovery document 事件中覆盖 endpoint URL
                     options
                         .AddEventHandler<
                             OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
