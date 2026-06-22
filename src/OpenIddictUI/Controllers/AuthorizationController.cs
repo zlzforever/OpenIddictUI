@@ -266,9 +266,16 @@ public class AuthorizationController(
     }
 
     [HttpGet("userinfo")]
-    [Authorize]
     public async Task GetUserInfo()
     {
+        var authenticateResult = await HttpContext.AuthenticateAsync();
+        if (authenticateResult.Succeeded == false)
+        {
+            logger.LogWarning("Authorize: unsuccessful authentication, {Message}", authenticateResult.Failure?.Message);
+            HttpContext.Response.StatusCode = 401;
+            return;
+        }
+
         var dictionary = new Dictionary<string, object>();
         foreach (var claim in HttpContext.User.Claims)
         {
