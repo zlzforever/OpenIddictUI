@@ -1,4 +1,3 @@
-
 using Identity.Sm;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
@@ -31,7 +30,7 @@ public partial class Program
     public static WebApplication CreateWebApplication(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-        builder.AddEnvironmentSubstitutedAppSettings();
+        builder.AddSubstitution();
 
         builder.Configuration.AddJsonFile("openiddict-seed.json", optional: true, reloadOnChange: true);
 
