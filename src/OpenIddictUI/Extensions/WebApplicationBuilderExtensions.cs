@@ -21,15 +21,14 @@ public static class WebApplicationBuilderExtensions
                 continue;
             }
 
-            var path = Path.GetFileName(fcs.Path);
-            if (string.IsNullOrEmpty(path))
+            if (string.IsNullOrEmpty(fcs.Path))
             {
                 continue;
             }
 
-            if (replaceFiles.ContainsKey(path))
+            if (replaceFiles.ContainsKey(fcs.Path))
             {
-                replaceFiles[path] = i;
+                replaceFiles[fcs.Path] = i;
             }
         }
 
@@ -64,7 +63,7 @@ public static class WebApplicationBuilderExtensions
                 continue;
             }
 
-            ReplaceSource(builder.Configuration, kv.Value.Value, Path.Combine(env.ContentRootPath, kv.Key));
+            ReplaceSource(builder.Configuration, kv.Value.Value, kv.Key);
         }
     }
 }
