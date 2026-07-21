@@ -6,14 +6,14 @@
 -->
 <template>
   <div class="welcome-page">
-    <p class="section-label">Authorized Applications</p>
+    <p class="section-label">{{ $t('grants.title') }}</p>
     <table class="info-table" v-if="grants.length">
       <tr v-for="g in grants" :key="g.clientId">
         <td class="key">{{ g.displayName || g.clientId }}</td>
         <td class="value">{{ g.scopes.join(', ') }}</td>
       </tr>
     </table>
-    <p v-else style="color:var(--text-muted)">No authorized applications.</p>
+    <p v-else style="color:var(--text-muted)">{{ $t('grants.noData') }}</p>
   </div>
 </template>
 
@@ -25,7 +25,6 @@ import { useSession } from '../composables/useSession'
 const router = useRouter()
 const { clients: grants } = useSession()
 
-// 调用 load() 获取 session 数据（已有缓存则直接返回）
 onMounted(async () => {
   const data = await useSession().load()
   if (!data.username) { router.replace('/account/login') }

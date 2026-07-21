@@ -2,14 +2,14 @@
 <template>
   <div class="admin-page">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>Applications</h2>
-      <n-button type="primary" @click="openAdd">添加</n-button>
+      <h2>{{ $t('applications.title') }}</h2>
+      <n-button type="primary" @click="openAdd">{{ $t('applications.add') }}</n-button>
     </div>
     <div class="app-list" v-if="apps.length">
       <div class="app-card" v-for="a in apps" :key="a.id">
         <div class="app-card-header">
           <span class="app-card-title">{{ a.displayName || a.clientId }}</span>
-          <n-tag :size="'small'" :type="a.enabled==='true'?'info':'error'">{{ a.enabled==='true'?'启用':'禁用' }}</n-tag>
+          <n-tag :size="'small'" :type="a.enabled==='true'?'info':'error'">{{ a.enabled==='true'?$t('applications.enabled'):$t('applications.disabled') }}</n-tag>
         </div>
         <div class="app-card-info">
           <span class="app-card-meta">{{ a.clientId }}</span>
@@ -18,70 +18,70 @@
           <span class="app-card-meta" v-if="a.clientUrl">· {{ a.clientUrl }}</span>
         </div>
         <div class="app-card-tags" v-if="(a.grantTypes||[]).length">
-          <span class="app-card-label">Grants</span>
+          <span class="app-card-label">{{ $t('applications.grants') }}</span>
           <n-tag v-for="g in a.grantTypes" :key="g" size="tiny" :bordered="true" type="default">{{ g }}</n-tag>
         </div>
         <div class="app-card-tags" v-if="(a.scopes||[]).length">
-          <span class="app-card-label">Scopes</span>
+          <span class="app-card-label">{{ $t('applications.scopes') }}</span>
           <n-tag v-for="s in a.scopes" :key="s" size="tiny" :bordered="true">{{ s }}</n-tag>
         </div>
         <div class="app-card-actions">
-          <n-popconfirm @positive-click="delApp(a)"><template #trigger><n-button size="small" text type="error">删除</n-button></template>确认删除？</n-popconfirm>
-          <n-button size="small" text type="primary" @click="openEdit(a)">编辑</n-button>
+          <n-popconfirm @positive-click="delApp(a)"><template #trigger><n-button size="small" text type="error">{{ $t('applications.delete') }}</n-button></template>{{ $t('applications.confirmDelete') }}</n-popconfirm>
+          <n-button size="small" text type="primary" @click="openEdit(a)">{{ $t('applications.edit') }}</n-button>
         </div>
       </div>
     </div>
-    <p v-else style="color:var(--text-muted)">暂无数据</p>
+    <p v-else style="color:var(--text-muted)">{{ $t('applications.noData') }}</p>
 
-    <n-modal :show="showModal" :title="editing?'编辑 Application':'添加 Application'" @update:show="showModal=$event"
+    <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="showModal=$event"
       preset="card" style="width:740px;min-height:620px" :mask-closable="false">
       <n-form label-placement="top" size="small">
         <n-tabs type="segment" animated style="min-height:520px">
-          <n-tab-pane name="basic" tab="Basic">
+          <n-tab-pane name="basic" :tab="$t('applications.tabBasic')">
             <n-grid :cols="2" :x-gap="12">
-              <n-form-item-gi label="ClientId"><n-input v-model:value="form.clientId" :disabled="editing"/></n-form-item-gi>
-              <n-form-item-gi label="DisplayName"><n-input v-model:value="form.displayName"/></n-form-item-gi>
-              <n-form-item-gi label="AppType"><n-select v-model:value="form.applicationType" :options="appTypes"/></n-form-item-gi>
-              <n-form-item-gi label="ClientType"><n-select v-model:value="form.clientType" :options="clientTypes"/></n-form-item-gi>
-              <n-form-item-gi label="ConsentType"><n-select v-model:value="form.consentType" :options="consentTypes"/></n-form-item-gi>
-              <n-form-item-gi label="ClientSecret">
+              <n-form-item-gi :label="$t('applications.clientId')"><n-input v-model:value="form.clientId" :disabled="editing"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.displayName')"><n-input v-model:value="form.displayName"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.appType')"><n-select v-model:value="form.applicationType" :options="appTypes"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.clientType')"><n-select v-model:value="form.clientType" :options="clientTypes"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.consentType')"><n-select v-model:value="form.consentType" :options="consentTypes"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.clientSecret')">
                 <n-input v-model:value="form.clientSecret" type="password"
-                  :disabled="form.clientType==='public'" :placeholder="form.clientType==='public'?'public 客户端无需 secret':'留空不修改'"/>
+                  :disabled="form.clientType==='public'" :placeholder="form.clientType==='public'?$t('applications.noSecretForPublic'):$t('applications.leaveBlank')"/>
               </n-form-item-gi>
-              <n-form-item-gi label="RequirePkce"><n-switch v-model:value="form.requirePkce"/></n-form-item-gi>
-              <n-form-item-gi label="Enabled"><n-switch v-model:value="form.enabled"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.requirePkce')"><n-switch v-model:value="form.requirePkce"/></n-form-item-gi>
+              <n-form-item-gi :label="$t('applications.enabledLabel')"><n-switch v-model:value="form.enabled"/></n-form-item-gi>
             </n-grid>
           </n-tab-pane>
-          <n-tab-pane name="tokens" tab="Tokens">
+          <n-tab-pane name="tokens" :tab="$t('applications.tabTokens')">
             <n-grid :cols="3" :x-gap="12">
-              <n-form-item-gi label="AccessToken">
+              <n-form-item-gi :label="$t('applications.accessToken')">
                 <n-input-number v-model:value="form.accessTokenLifetime" :min="30" placeholder="3600"/>
               </n-form-item-gi>
-              <n-form-item-gi label="AuthCode">
+              <n-form-item-gi :label="$t('applications.authCode')">
                 <n-input-number v-model:value="form.authorizationCodeLifetime" :min="10" placeholder="300"/>
               </n-form-item-gi>
-              <n-form-item-gi label="RefreshToken">
+              <n-form-item-gi :label="$t('applications.refreshToken')">
                 <n-input-number v-model:value="form.refreshTokenLifetime" :min="30" placeholder="1209600"/>
               </n-form-item-gi>
-              <n-form-item-gi label="IdToken">
+              <n-form-item-gi :label="$t('applications.idToken')">
                 <n-input-number v-model:value="form.identityTokenLifetime" :min="30" placeholder="3600"/>
               </n-form-item-gi>
-              <n-form-item-gi label="DeviceCode">
+              <n-form-item-gi :label="$t('applications.deviceCode')">
                 <n-input-number v-model:value="form.deviceCodeLifetime" :min="10" placeholder="300"/>
               </n-form-item-gi>
-              <n-form-item-gi label="UserCode">
+              <n-form-item-gi :label="$t('applications.userCode')">
                 <n-input-number v-model:value="form.userCodeLifetime" :min="10" placeholder="300"/>
               </n-form-item-gi>
             </n-grid>
           </n-tab-pane>
-          <n-tab-pane name="grants" tab="Grants">
+          <n-tab-pane name="grants" :tab="$t('applications.tabGrants')">
             <n-checkbox-group v-model:value="form.selectedGrantTypes">
               <n-space>
                 <n-checkbox v-for="gt in availableGrantTypes" :key="gt" :value="gt" :label="gt"/>
               </n-space>
             </n-checkbox-group>
           </n-tab-pane>
-          <n-tab-pane name="scopes" tab="Scopes">
+          <n-tab-pane name="scopes" :tab="$t('applications.tabScopes')">
             <div style="min-height:80px">
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
               <n-tag v-for="s in sysScopes" :key="s.name" :type="form.selectedScopes.includes(s.name)?'primary':'default'"
@@ -101,13 +101,13 @@
             </div>
             </div>
           </n-tab-pane>
-          <n-tab-pane name="uris" tab="URIs">
-            <n-form-item label="RedirectUris（每行一个）"><n-input v-model:value="form.redirectUrisText" type="textarea" :rows="4"/></n-form-item>
-            <n-form-item label="PostLogoutRedirectUris"><n-input v-model:value="form.postLogoutRedirectUrisText" type="textarea" :rows="3"/></n-form-item>
+          <n-tab-pane name="uris" :tab="$t('applications.tabUris')">
+            <n-form-item :label="$t('applications.redirectUris')"><n-input v-model:value="form.redirectUrisText" type="textarea" :rows="4"/></n-form-item>
+            <n-form-item :label="$t('applications.postLogoutUris')"><n-input v-model:value="form.postLogoutRedirectUrisText" type="textarea" :rows="3"/></n-form-item>
           </n-tab-pane>
-          <n-tab-pane name="display" tab="Display">
-            <n-form-item label="Client URL"><n-input v-model:value="form.clientUrl" placeholder="https://example.com"/></n-form-item>
-            <n-form-item label="Client Logo URL"><n-input v-model:value="form.clientLogoUrl" placeholder="https://example.com/logo.png"/></n-form-item>
+          <n-tab-pane name="display" :tab="$t('applications.tabDisplay')">
+            <n-form-item :label="$t('applications.clientUrl')"><n-input v-model:value="form.clientUrl" placeholder="https://example.com"/></n-form-item>
+            <n-form-item :label="$t('applications.clientLogoUrl')"><n-input v-model:value="form.clientLogoUrl" placeholder="https://example.com/logo.png"/></n-form-item>
           </n-tab-pane>
         </n-tabs>
       </n-form>
@@ -116,8 +116,8 @@
           <span v-if="valMsg" style="color:var(--error);font-size:0.8125rem">{{ valMsg }}</span>
         </div>
         <n-space justify="end">
-          <n-button @click="showModal=false">取消</n-button>
-          <n-button type="primary" @click="handleSave">保存</n-button>
+          <n-button @click="showModal=false">{{ $t('applications.close') }}</n-button>
+          <n-button type="primary" @click="handleSave">{{ $t('applications.save') }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -126,8 +126,10 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NTag, NButton, useMessage, NPopconfirm } from 'naive-ui'
 
+const { t } = useI18n()
 const api = document.querySelector('base')?.getAttribute('href') || '/'
 const msg = useMessage()
 
@@ -163,16 +165,16 @@ function openEdit(a:AppInfo){ editing.value=true; editId.value=a.id; form.value=
 
 async function handleSave(){
   valMsg.value=''
-  if(!form.value.clientId.trim()){ valMsg.value='ClientId 不能为空'; return }
-  if(form.value.clientType==='confidential' && !form.value.clientSecret.trim()){ valMsg.value='confidential 客户端必须设置 ClientSecret'; return }
-  if(form.value.selectedGrantTypes.includes('authorization_code') && !form.value.redirectUrisText.trim()){ valMsg.value='authorization_code grant 必须设置 RedirectUris'; return }
+  if(!form.value.clientId.trim()){ valMsg.value=t('applications.clientIdRequired'); return }
+  if(form.value.clientType==='confidential' && !form.value.clientSecret.trim()){ valMsg.value=t('applications.confidentialSecretRequired'); return }
+  if(form.value.selectedGrantTypes.includes('authorization_code') && !form.value.redirectUrisText.trim()){ valMsg.value=t('applications.authCodeRequiresRedirectUri'); return }
   const body={ clientId:form.value.clientId,clientSecret:form.value.clientSecret||null,displayName:form.value.displayName,applicationType:form.value.applicationType,clientType:form.value.clientType,consentType:form.value.consentType,redirectUris:form.value.redirectUrisText.split('\n').filter(s=>s.trim()),postLogoutRedirectUris:form.value.postLogoutRedirectUrisText.split('\n').filter(s=>s.trim()),clientUrl:form.value.clientUrl||null,clientLogoUrl:form.value.clientLogoUrl||null,accessTokenLifetime:form.value.accessTokenLifetime,authorizationCodeLifetime:form.value.authorizationCodeLifetime,refreshTokenLifetime:form.value.refreshTokenLifetime,identityTokenLifetime:form.value.identityTokenLifetime,deviceCodeLifetime:form.value.deviceCodeLifetime,userCodeLifetime:form.value.userCodeLifetime,scopes:form.value.selectedScopes,grantTypes:form.value.selectedGrantTypes,enabled:form.value.enabled,requirePkce:form.value.requirePkce }
   const url=editing.value?`${api}api/applications/${editId.value}`:`${api}api/applications`
   const r=await fetch(url,{method:editing.value?'PUT':'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-  const d=await r.json(); if(d.code===200){ showModal.value=false; await loadApps(); msg.success('保存成功') } else msg.error(d.message||'操作失败')
+  const d=await r.json(); if(d.code===200){ showModal.value=false; await loadApps(); msg.success(t('applications.saveSuccess')) } else msg.error(d.message||t('applications.saveFailed'))
 }
 
-async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${a.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadApps(); msg.success('删除成功') } else msg.error(d.message||'删除失败') }
+async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${a.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadApps(); msg.success(t('applications.deleteSuccess')) } else msg.error(d.message||t('applications.deleteFailed')) }
 </script>
 
 <style scoped>

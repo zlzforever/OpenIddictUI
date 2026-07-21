@@ -10,17 +10,17 @@
     <div v-if="visible" class="slider-overlay" @click.self="cancel">
       <div class="slider-popup">
         <div class="slider-popup-header">
-          <span>安全验证</span>
+          <span>{{ $t('sliderCaptcha.title') }}</span>
           <button class="slider-close" @click="cancel">&times;</button>
         </div>
         <div class="slider-popup-body">
-          <p class="slider-hint">请将滑块拖到图中圆形缺口处</p>
+          <p class="slider-hint">{{ $t('sliderCaptcha.hint') }}</p>
           <div class="slider-track" ref="trackRef" :style="{ backgroundImage: bgImage ? `url(${bgImage})` : undefined }">
             <div class="slider-fill" :style="{ width: fillPercent + '%' }"></div>
             <div class="slider-handle" :class="{ dragging, error: showError }" :style="{ left: fillPercent + '%' }" @mousedown.prevent="startDrag" @touchstart.prevent="startDrag">&#10141;</div>
           </div>
           <p v-if="errorMsg" class="slider-error">{{ errorMsg }}</p>
-          <p v-if="loading" class="slider-loading">加载中...</p>
+          <p v-if="loading" class="slider-loading">{{ $t('sliderCaptcha.loading') }}</p>
         </div>
       </div>
     </div>
@@ -29,8 +29,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { sliderInit, sliderVerify } from '../services/api'
 
+const { t } = useI18n()
 const IMG_W = 340
 const emit = defineEmits<{ verified: [] }>()
 
@@ -47,19 +49,16 @@ async function start() {
   showError.value = false
   errorMsg.value = ''
   fillPercent.value = 0
-  // 释放旧 blob URL
   if (bgImage.value) URL.revokeObjectURL(bgImage.value)
   bgImage.value = ''
   visible.value = true
   try {
     loading.value = true
     const res = await sliderInit()
-    // if (!res.ok) throw new Error()
-
     const blob = await res.blob()
     bgImage.value = URL.createObjectURL(blob)
   } catch {
-    errorMsg.value = '初始化失败，请重试'
+    errorMsg.value = t('sliderCaptcha.initFailed')
   } finally {
     loading.value = false
   }
@@ -113,12 +112,12 @@ async function verify() {
       emit('verified')
     } else {
       showError.value = true
-      errorMsg.value = '验证失败，请重试'
+      errorMsg.value = t('sliderCaptcha.failed')
       await start()
     }
   } catch {
     showError.value = true
-    errorMsg.value = '验证失败，请重试'
+    errorMsg.value = t('sliderCaptcha.failed')
   } finally {
     loading.value = false
   }

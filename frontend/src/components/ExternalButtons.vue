@@ -5,11 +5,11 @@
   ============================================================
 -->
 <template>
-  <div v-if="providers.length === 0" class="empty-providers">No external providers configured</div>
+  <div v-if="providers.length === 0" class="empty-providers">{{ $t('login.noExternalProviders') }}</div>
   <button v-for="p in providers" :key="p.id" class="external-provider-btn"
     :style="{ '--provider-color': p.color }" @click="p.handler">
     <span class="provider-icon" v-html="p.icon"></span>
-    Continue with {{ p.name }}
+    {{ $t('login.continueWith', { name: p.name }) }}
   </button>
 </template>
 

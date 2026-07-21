@@ -493,7 +493,7 @@ public class AccountController(
         }
 
         // 无 CaptchaCode → 校验滑块
-        var sliderId = Request.Cookies["SliderCaptchaId"];
+        var sliderId = Request.Headers[Util.CaptchaIdHeader].FirstOrDefault();
         if (string.IsNullOrEmpty(sliderId))
         {
             return Errors.SliderRequired;

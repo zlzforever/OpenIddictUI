@@ -9,9 +9,9 @@
 -->
 <template>
   <div class="card logout-page">
-    <h1>Logout</h1>
-    <p>Would you like to logout?</p>
-    <button class="btn btn-primary" @click="submit">Yes</button>
+    <h1>{{ $t('logout.title') }}</h1>
+    <p>{{ $t('logout.confirmMessage') }}</p>
+    <button class="btn btn-primary" @click="submit">{{ $t('logout.confirmBtn') }}</button>
   </div>
 </template>
 
@@ -19,7 +19,6 @@
 import { logout } from '../services/api'
 
 async function submit() {
-  // ① POST /account/logout（apiPost 自动带 XSRF token）
   const data = await logout() as { data?: { location?: string } }
   if (data.data?.location) {
     window.location.href = data.data.location

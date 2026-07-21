@@ -2,27 +2,29 @@
 <template>
   <div class="card error-page">
     <div class="error-icon">&#9888;</div>
-    <h1>Error</h1>
+    <h1>{{ $t('errors.title') }}</h1>
     <p>{{ message }}</p>
     <p class="text-muted" style="font-size:0.75rem">Error code: {{ code }}</p>
-    <router-link to="/account/login" class="btn btn-primary" style="margin-top:1rem;display:inline-block;text-decoration:none">Return to Login</router-link>
+    <router-link to="/account/login" class="btn btn-primary" style="margin-top:1rem;display:inline-block;text-decoration:none">{{ $t('errors.returnToLogin') }}</router-link>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const route = useRoute()
 const code = parseInt(route.query.errorId as string, 10) || 0
 
 const messages: Record<number, string> = {
-  4001: '不支持双因素认证', 4002: '用户被禁止登录', 4003: '用户被锁定',
-  4004: '用户名或密码不正确', 4005: '不支持 NativeClient', 4006: '返回地址不合法',
-  4007: '选择的操作不正确', 4008: '没有 Scope 可匹配', 4009: '客户端标识出错',
-  4010: '授权请求链接不正确', 4011: '登录失败', 4012: '用户不存在',
-  4013: '验证码过期', 4014: '验证码不正确', 4015: '密码不符合安全要求', 4017: '短信发送失败',
+  4001: t('errors.e4001'), 4002: t('errors.e4002'), 4003: t('errors.e4003'),
+  4004: t('errors.e4004'), 4005: t('errors.e4005'), 4006: t('errors.e4006'),
+  4007: t('errors.e4007'), 4008: t('errors.e4008'), 4009: t('errors.e4009'),
+  4010: t('errors.e4010'), 4011: t('errors.e4011'), 4012: t('errors.e4012'),
+  4013: t('errors.e4013'), 4014: t('errors.e4014'), 4015: t('errors.e4015'), 4017: t('errors.e4017'),
 }
 
-const message = computed(() => messages[code] || '未知错误')
+const message = computed(() => messages[code] || t('errors.unknown'))
 </script>

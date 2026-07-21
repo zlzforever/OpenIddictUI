@@ -106,15 +106,6 @@ public partial class Program
         builder.Services.AddGrant<PhoneCodeGrantHandler>(PhoneCodeGrantHandler.GrantType);
         builder.Services.AddGrant<AuthorizationCodeGrantHandler>(AuthorizationCodeGrantHandler.GrantType);
 
-        builder.Services.AddSession(options =>
-        {
-            options.IdleTimeout = TimeSpan.FromMinutes(10);
-            options.Cookie.Name = "session";
-            options.Cookie.HttpOnly = true;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.None;
-            options.Cookie.IsEssential = true;
-        });
-
         builder.Services.AddOpenIddict()
             .AddCore(options => { options.UseEntityFrameworkCore().UseDbContext<AppDbContext>(); })
             .AddServer(options =>
@@ -178,8 +169,8 @@ public partial class Program
         builder.Services.AddAntiforgery(options =>
         {
             options.HeaderName = "X-XSRF-TOKEN";
-            options.Cookie.Name = "XSRF-TOKEN";
-            options.Cookie.SameSite = SameSiteMode.Lax;
+            // options.Cookie.Name = "XSRF-TOKEN";
+            // options.Cookie.SameSite = SameSiteMode.Lax;
         });
         builder.Services.AddControllers();
         builder.Services.AddRouting(options => options.LowercaseUrls = true);
@@ -212,7 +203,6 @@ public partial class Program
         app.UseRouting();
         app.UseAntiforgery();
         app.UseCors("cors");
-        app.UseSession();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();

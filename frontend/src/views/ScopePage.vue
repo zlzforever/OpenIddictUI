@@ -2,22 +2,22 @@
 <template>
   <div class="admin-page">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2>Scopes</h2>
-      <n-button type="primary" @click="openAdd">添加</n-button>
+      <h2>{{ $t('scopes.title') }}</h2>
+      <n-button type="primary" @click="openAdd">{{ $t('scopes.add') }}</n-button>
     </div>
     <n-data-table :columns="columns" :data="scopes" :bordered="true" size="small" :pagination="false" />
 
-    <n-modal :show="showModal" :title="editing ? '编辑 Scope' : '添加 Scope'" @update:show="showModal=$event"
+    <n-modal :show="showModal" :title="editing ? $t('scopes.edit')+' Scope' : $t('scopes.add')+' Scope'" @update:show="showModal=$event"
       preset="card" style="width:500px" :mask-closable="false">
       <n-form label-placement="top" size="small">
-        <n-form-item label="Name"><n-input v-model:value="form.name" :disabled="editing" /></n-form-item>
-        <n-form-item label="DisplayName"><n-input v-model:value="form.displayName" /></n-form-item>
-        <n-form-item label="Description"><n-input v-model:value="form.description" /></n-form-item>
+        <n-form-item :label="$t('scopes.name')"><n-input v-model:value="form.name" :disabled="editing" /></n-form-item>
+        <n-form-item :label="$t('scopes.displayName')"><n-input v-model:value="form.displayName" /></n-form-item>
+        <n-form-item :label="$t('scopes.description')"><n-input v-model:value="form.description" /></n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showModal=false">取消</n-button>
-          <n-button type="primary" @click="handleSave">保存</n-button>
+          <n-button @click="showModal=false">{{ $t('scopes.cancel') }}</n-button>
+          <n-button type="primary" @click="handleSave">{{ $t('scopes.save') }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -26,8 +26,10 @@
 
 <script setup lang="ts">
 import { h, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NTag, NButton, useMessage, NPopconfirm } from 'naive-ui'
 
+const { t } = useI18n()
 const api = document.querySelector('base')?.getAttribute('href') || '/'
 const msg = useMessage()
 
@@ -36,13 +38,13 @@ const scopes=ref<ScopeInfo[]>([]); const showModal=ref(false); const editing=ref
 const form=ref({ name:'',displayName:'',description:'' })
 
 const columns = [
-  { title:'Name', key:'name', render:(row:ScopeInfo)=>row.name },
-  { title:'DisplayName', key:'displayName', render:(row:ScopeInfo)=>row.displayName },
-  { title:'Description', key:'description', ellipsis:{tooltip:true}, render:(row:ScopeInfo)=>row.description },
-  { title:'操作', key:'action', width:150, render:(row:ScopeInfo)=>h('div',{style:'display:flex;gap:6px'},[
-    h(NButton,{size:'tiny',text:true,type:'primary',onClick:()=>openEdit(row)},{default:()=>'编辑'}),
-    row.system ? h(NButton,{size:'tiny',text:true,disabled:true},{default:()=>'默认'}) :
-    h(NPopconfirm,{onPositiveClick:()=>delScope(row)},{trigger:()=>h(NButton,{size:'tiny',text:true,type:'error'},{default:()=>'删除'}),default:()=>'确认删除？'})
+  { title:t('scopes.name'), key:'name', render:(row:ScopeInfo)=>row.name },
+  { title:t('scopes.displayName'), key:'displayName', render:(row:ScopeInfo)=>row.displayName },
+  { title:t('scopes.description'), key:'description', ellipsis:{tooltip:true}, render:(row:ScopeInfo)=>row.description },
+  { title:t('scopes.edit'), key:'action', width:150, render:(row:ScopeInfo)=>h('div',{style:'display:flex;gap:6px'},[
+    h(NButton,{size:'tiny',text:true,type:'primary',onClick:()=>openEdit(row)},{default:()=>t('scopes.edit')}),
+    row.system ? h(NButton,{size:'tiny',text:true,disabled:true},{default:()=>t('scopes.systemScope')}) :
+    h(NPopconfirm,{onPositiveClick:()=>delScope(row)},{trigger:()=>h(NButton,{size:'tiny',text:true,type:'error'},{default:()=>t('scopes.delete')}),default:()=>t('scopes.confirmDelete')})
   ]) },
 ]
 
@@ -57,8 +59,8 @@ async function handleSave(){
   const url=editing.value?`${api}api/scopes/${editId.value}`:`${api}api/scopes`
   const r=await fetch(url,{method:editing.value?'PUT':'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
   const d=await r.json()
-  if(d.code===200){ showModal.value=false; await loadData(); msg.success('保存成功') } else msg.error(d.message||'操作失败')
+  if(d.code===200){ showModal.value=false; await loadData(); msg.success(t('scopes.saveSuccess')) } else msg.error(d.message||t('scopes.saveFailed'))
 }
 
-async function delScope(s:ScopeInfo){ const r=await fetch(`${api}api/scopes/${s.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadData(); msg.success('删除成功') } else msg.error(d.message||'删除失败') }
+async function delScope(s:ScopeInfo){ const r=await fetch(`${api}api/scopes/${s.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadData(); msg.success(t('scopes.deleteSuccess')) } else msg.error(d.message||t('scopes.deleteFailed')) }
 </script>

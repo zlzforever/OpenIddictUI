@@ -5,39 +5,51 @@
 import { apiPost, apiGet, apiPut, apiDelete } from '../composables/useFetch'
 
 export async function login(body: Record<string, unknown>) {
-  return apiPost('account/login', body) as Promise<{ code: number; message?: string; data?: { location?: string } }>
+  return apiPost('account/login', body, _captchaId) as Promise<{ code: number; message?: string; data?: { location?: string } }>
 }
 
 export async function loginBySms(body: Record<string, unknown>) {
-  return apiPost('account/login-by-sms', body) as Promise<{ code: number; message?: string; data?: { location?: string } }>
+  return apiPost('account/login-by-sms', body, _captchaId) as Promise<{ code: number; message?: string; data?: { location?: string } }>
 }
 
 export async function sendSmsCode(body: Record<string, unknown>) {
-  return apiPost('account/send-sms-code', body) as Promise<{ code: number; message?: string }>
+  return apiPost('account/send-sms-code', body, _captchaId) as Promise<{ code: number; message?: string }>
 }
 
 export async function logout() {
-  return apiPost('account/logout', {}) as Promise<{ data?: { location?: string } }>
+  return apiPost('account/logout', {}, _captchaId) as Promise<{ data?: { location?: string } }>
 }
 
 export async function changePassword(body: Record<string, unknown>) {
-  return apiPost('account/change-password', body) as Promise<{ code: number; message?: string }>
+  return apiPost('account/change-password', body, _captchaId) as Promise<{ code: number; message?: string }>
 }
 
 export async function getSession() {
   return fetch('session', { credentials: 'include' })
 }
 
-export function captchaImageUrl() {
-  return `api/v1.0/captcha/image?_t=${Date.now()}`
+// ---- Captcha ----
+
+let _captchaId = ''
+
+export function getCaptchaId() { return _captchaId }
+export function setCaptchaId(id: string) { _captchaId = id }
+
+export async function captchaImage() {
+  const res = await fetch(`api/v1.0/captcha/image?_t=${Date.now()}`, { credentials: 'include' })
+  _captchaId = res.headers.get('Z-CaptchaId') || ''
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
 }
 
 export async function sliderInit() {
-  return fetch('api/v1.0/captcha/slider', { credentials: 'include' })
+  const res = await fetch('api/v1.0/captcha/slider', { credentials: 'include' })
+  _captchaId = res.headers.get('Z-CaptchaId') || ''
+  return res
 }
 
 export async function sliderVerify(position: number) {
-  return apiPost('api/v1.0/captcha/slider/verify', { id: '', position }) as Promise<{ success: boolean }>
+  return apiPost('api/v1.0/captcha/slider/verify', { position }, _captchaId) as Promise<{ success: boolean }>
 }
 
 export async function getConsent(id: string) {

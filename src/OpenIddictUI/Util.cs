@@ -4,7 +4,7 @@ namespace OpenIddictUI;
 
 public static class Util
 {
-    public const string CaptchaId = "CaptchaId";
+    public const string CaptchaIdHeader = "Z-CaptchaId";
     public const string CaptchaImageKey = "Captcha:Image:{0}";
     public const string CaptchaSliderKey = "Captcha:Slider:{0}";
     public const string CaptchaSliderVerified = "Captcha:SliderVerified:{0}";
@@ -14,6 +14,7 @@ public static class Util
     public const string PurposeLogin = "Login";
     public const string PurposeRegister = "Register";
     public static string AuthorizePrefix = "/connect/authorize?";
+
     public static readonly Dictionary<string, string> JwtClaimMappings = new()
     {
         { ClaimTypes.NameIdentifier, "sub" },

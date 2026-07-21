@@ -14,22 +14,22 @@
 -->
 <template>
   <div class="card" v-if="data">
-    <div class="card-header"><h1>Authorization Request</h1></div>
+    <div class="card-header"><h1>{{ $t('consent.title') }}</h1></div>
     <div class="consent-client">
       <img alt="" v-if="data.clientLogoUrl" :src="data.clientLogoUrl" class="consent-logo" />
       <div>
         <div class="consent-client-name">{{ data.clientName }}</div>
       </div>
     </div>
-    <p class="text-muted">is requesting access to:</p>
-    <h3 v-if="data.identityScopes?.length">Personal Information</h3>
+    <p class="text-muted">{{ data.clientName }} {{ $t('consent.requestingAccess') }}</p>
+    <h3 v-if="data.identityScopes?.length">{{ $t('consent.personalInfo') }}</h3>
     <ul class="scope-list" v-if="data.identityScopes?.length">
       <li v-for="s in data.identityScopes" :key="s.name" class="scope-item">
         <input type="checkbox" :checked="s.checked" :disabled="s.required" :value="s.name" />
-        <div class="scope-info"><strong>{{ s.displayName }}</strong> <span v-if="s.required" class="scope-required">(required)</span></div>
+        <div class="scope-info"><strong>{{ s.displayName }}</strong> <span v-if="s.required" class="scope-required">{{ $t('consent.required') }}</span></div>
       </li>
     </ul>
-    <h3 v-if="data.resourceScopes?.length">Application Access</h3>
+    <h3 v-if="data.resourceScopes?.length">{{ $t('consent.appAccess') }}</h3>
     <ul class="scope-list" v-if="data.resourceScopes?.length">
       <li v-for="s in data.resourceScopes" :key="s.name" class="scope-item">
         <input type="checkbox" :checked="s.checked" :disabled="s.required" :value="s.name" />
@@ -37,11 +37,11 @@
       </li>
     </ul>
     <div style="display:flex;gap:0.5rem">
-      <button class="btn btn-primary" style="flex:1" @click="submit('yes')">Yes, Allow</button>
-      <button class="btn btn-secondary" style="flex:1" @click="submit('no')">No, Deny</button>
+      <button class="btn btn-primary" style="flex:1" @click="submit('yes')">{{ $t('consent.yesAllow') }}</button>
+      <button class="btn btn-secondary" style="flex:1" @click="submit('no')">{{ $t('consent.noDeny') }}</button>
     </div>
   </div>
-  <div class="card" v-else><p>Loading...</p></div>
+  <div class="card" v-else><p>{{ $t('consent.loading') }}</p></div>
 </template>
 
 <script setup lang="ts">
@@ -56,7 +56,6 @@ const data = ref<ConsentData | null>(null)
 const consentId = route.params.id as string || ''
 const returnUrl = ref('')
 
-// ① 加载 consent 数据
 onMounted(async () => {
   try {
     const res = (await getConsent(consentId)) as { data: ConsentData }
@@ -65,7 +64,6 @@ onMounted(async () => {
   } catch { data.value = null }
 })
 
-// ③/④ 提交用户选择（同意 / 拒绝）
 async function submit(button: string) {
   const checkboxes = document.querySelectorAll<HTMLInputElement>('.scope-item input[type="checkbox"]:checked')
   const scopes = Array.from(checkboxes).map(c => c.value)

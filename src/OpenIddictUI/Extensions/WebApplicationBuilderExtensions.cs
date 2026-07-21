@@ -48,12 +48,9 @@ public static class WebApplicationBuilderExtensions
                 return;
             }
 
-            using var stream =
-                new MemoryStream(System.Text.Encoding.UTF8.GetBytes(SubstituteEnv(File.ReadAllText(path))));
-            configurationManager.Sources[index] = new JsonStreamConfigurationSource
-            {
-                Stream = stream
-            };
+            var rawJson = SubstituteEnv(File.ReadAllText(path));
+            var rawBytes = System.Text.Encoding.UTF8.GetBytes(rawJson);
+            configurationManager.Sources[index] = new ReusableJsonStreamSource(rawBytes);
         }
 
         foreach (var kv in replaceFiles)
@@ -65,5 +62,17 @@ public static class WebApplicationBuilderExtensions
 
             ReplaceSource(builder.Configuration, kv.Value.Value, kv.Key);
         }
+    }
+}
+
+/// <summary>
+/// 每次 Build() 创建新 MemoryStream，避免 stream 被消费/关闭后无法重读
+/// </summary>
+file sealed class ReusableJsonStreamSource(byte[] rawBytes) : JsonStreamConfigurationSource
+{
+    public override IConfigurationProvider Build(IConfigurationBuilder builder)
+    {
+        Stream = new MemoryStream(rawBytes);
+        return base.Build(builder);
     }
 }

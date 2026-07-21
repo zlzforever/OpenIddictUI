@@ -1,8 +1,8 @@
 <!-- 通用重定向页：从 query.redirectUrl 读取目标 URL 并跳转 -->
 <template>
   <div class="redirect-page">
-    <p v-if="url">Redirecting...</p>
-    <p v-else>No redirect URL specified.</p>
+    <p v-if="url">{{ $t('common.redirecting') }}</p>
+    <p v-else>{{ $t('common.noRedirectUrl') }}</p>
   </div>
 </template>
 

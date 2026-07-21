@@ -6,15 +6,15 @@
 -->
 <template>
   <div class="admin-page">
-    <h2 style="margin-bottom:1rem">欢迎</h2>
+    <h2 style="margin-bottom:1rem">{{ $t('welcome.title') }}</h2>
     <div class="welcome-card">
       <p class="user-name" v-if="user">{{ user }}</p>
       <div class="links">
-        <a href=".well-known/openid-configuration" target="_blank">OpenID Configuration</a>
+        <a href=".well-known/openid-configuration" target="_blank">{{ $t('welcome.openidConfig') }}</a>
       </div>
       <pre class="claims-text">{{ claims.map(c => `${c.type}: ${c.value}`).join('\n') }}</pre>
       <div v-if="clients.length">
-        <p class="section-label">Consented Clients</p>
+        <p class="section-label">{{ $t('welcome.consentedClients') }}</p>
         <pre class="claims-text">{{ clients.map(c => `${c.displayName || c.clientId}: ${c.scopes.join(', ')}`).join('\n') }}</pre>
       </div>
     </div>
@@ -30,7 +30,6 @@ const router = useRouter()
 const { claims, clients, load } = useSession()
 const user = ref('')
 
-// 调用 load() → 已由 router 或 App.vue 触发过则直接返回缓存，不重复请求
 onMounted(async () => {
   const data = await load()
   if (!data.username) { router.replace('/account/login'); return }

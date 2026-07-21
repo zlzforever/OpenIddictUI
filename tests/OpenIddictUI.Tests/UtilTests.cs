@@ -3,9 +3,9 @@ namespace OpenIddictUI.Tests;
 public class UtilTests
 {
     [Fact]
-    public void CaptchaId_Constant_IsCorrect()
+    public void CaptchaIdHeader_Constant_IsCorrect()
     {
-        Util.CaptchaId.Should().Be("CaptchaId");
+        Util.CaptchaIdHeader.Should().Be("Z-CaptchaId");
     }
 
     [Fact]

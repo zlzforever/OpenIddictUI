@@ -22,15 +22,12 @@ public class CaptchaController(
     // ---- 图形验证码 ----
 
     [HttpGet("image")]
-    public IActionResult Generate()
+    public IActionResult Image()
     {
         var code = GenerateCode(options.Value.GetVerifyCodeLength());
         var captchaId = Guid.CreateVersion7().ToString("N");
         var cacheKey = string.Format(Util.CaptchaImageKey, captchaId);
-        Response.Cookies.Append(Util.CaptchaId, captchaId, new CookieOptions
-        {
-            MaxAge = TimeSpan.FromMinutes(6)
-        });
+        Response.Headers[Util.CaptchaIdHeader] = captchaId;
         hybridCache.SetAsync(cacheKey, code, new HybridCacheEntryOptions
         {
             Expiration = TimeSpan.FromMinutes(3),
@@ -88,11 +85,7 @@ public class CaptchaController(
         await hybridCache.SetAsync(string.Format(Util.CaptchaSliderKey, id), notchX,
             new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(3) });
 
-        Response.Cookies.Append("SliderCaptchaId", id, new CookieOptions
-        {
-            MaxAge = TimeSpan.FromMinutes(3),
-            SameSite = SameSiteMode.Lax
-        });
+        Response.Headers[Util.CaptchaIdHeader] = id;
         return File(imageBytes, "image/jpeg");
     }
 
@@ -100,7 +93,7 @@ public class CaptchaController(
     [HttpPost("slider/verify")]
     public async Task<IActionResult> SliderVerify([FromBody] SliderVerifyInput input)
     {
-        var captchaId = Request.Cookies["SliderCaptchaId"] ?? string.Empty;
+        var captchaId = Request.Headers[Util.CaptchaIdHeader].FirstOrDefault() ?? string.Empty;
         if (string.IsNullOrEmpty(captchaId))
         {
             return Ok(Errors.InvalidParams);

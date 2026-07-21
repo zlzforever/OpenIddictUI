@@ -15,11 +15,7 @@ public static class HttpContextExtensions
         {
             return true;
         }
-        var captchaId = httpContext.Request.Cookies[Util.CaptchaId];
-        if (string.IsNullOrEmpty(captchaId))
-        {
-            captchaId = httpContext.Request.Headers["Z-CaptchaId"];
-        }
+        var captchaId = httpContext.Request.Headers[Util.CaptchaIdHeader].FirstOrDefault();
 
         if (string.IsNullOrEmpty(captchaId))
         {

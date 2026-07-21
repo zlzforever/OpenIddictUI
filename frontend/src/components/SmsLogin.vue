@@ -11,19 +11,19 @@
 <template>
   <div>
     <div class="form-group">
-      <label for="smsPhone">Phone Number</label>
-      <input class="form-control input-bg" id="smsPhone" v-model="phone" placeholder="Phone number" autofocus maxlength="20" />
+      <label for="smsPhone">{{ $t('smsLogin.phone') }}</label>
+      <input class="form-control input-bg" id="smsPhone" v-model="phone" :placeholder="$t('smsLogin.phone')" autofocus maxlength="20" />
     </div>
     <div class="form-group">
-      <label for="smsCode">SMS Code</label>
+      <label for="smsCode">{{ $t('smsLogin.smsCode') }}</label>
       <div class="sms-send-wrap">
-        <input type="text" class="form-control input-bg" id="smsCode" v-model="code" placeholder="Verification code" autocomplete="off" maxlength="6" />
+        <input type="text" class="form-control input-bg" id="smsCode" v-model="code" :placeholder="$t('smsLogin.smsCode')" autocomplete="off" maxlength="6" />
         <button type="button" class="btn-send" :disabled="cooling" @click="startSend">
-          {{ cooling ? `Resend (${seconds}s)` : 'Send SMS' }}
+          {{ cooling ? $t('smsLogin.resend', { seconds }) : $t('smsLogin.sendSms') }}
         </button>
       </div>
     </div>
-    <button class="btn btn-primary btn-block" @click="submit">Login</button>
+    <button class="btn btn-primary btn-block" @click="submit">{{ $t('smsLogin.login') }}</button>
 
     <SliderCaptcha ref="sliderRef" @verified="doSendCode" />
   </div>
@@ -31,9 +31,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { sendSmsCode, loginBySms } from '../services/api'
 import SliderCaptcha from './SliderCaptcha.vue'
 
+const { t } = useI18n()
 const props = defineProps<{ returnUrl: string }>()
 const emit = defineEmits<{ error: [msg: string] }>()
 const phone = ref('')
@@ -43,25 +45,22 @@ const seconds = ref(60)
 const sliderRef = ref<InstanceType<typeof SliderCaptcha> | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
 
-// ① 点击发送 → 弹出滑动验证
 function startSend() {
-  if (!phone.value) { emit('error', '请输入手机号'); return }
+  if (!phone.value) { emit('error', t('smsLogin.enterPhone')); return }
   emit('error', '')
   sliderRef.value?.start()
 }
 
-// ③ 滑动验证通过 → 自动调用发短信 API
 async function doSendCode() {
   const data = await sendSmsCode({
     phoneNumber: phone.value, countryCode: '+86', scenario: 'Login'
   }) as { code: number; message?: string }
-  if (data.code !== 200) { emit('error', data.message || '发送失败'); return }
+  if (data.code !== 200) { emit('error', data.message || ''); return }
   cooling.value = true
   seconds.value = 60
   timer = setInterval(() => { seconds.value--; if (seconds.value <= 0) { cooling.value = false; clearInterval(timer!); timer = null } }, 1000)
 }
 
-// ④ 短信验证码登录
 async function submit() {
   emit('error', '')
   try {
@@ -72,10 +71,10 @@ async function submit() {
     if (data.data?.location) {
       window.location.href = data.data.location
     } else {
-      emit('error', data.message || '登录失败')
+      emit('error', data.message || '')
     }
   } catch {
-    emit('error', '服务器错误')
+    emit('error', '')
   }
 }
 </script>

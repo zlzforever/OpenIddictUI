@@ -1,27 +1,25 @@
-<!--
-  ============================================================
-  根组件：导航栏 + router-view
-  onMounted 时调用 load() 预加载 session，避免后续页面二次请求
-  ============================================================
--->
 <template>
-  <n-config-provider :theme-overrides="themeOverrides">
+  <n-config-provider :locale="naiveLocale.locale" :date-locale="naiveLocale.dateLocale" :theme-overrides="themeOverrides">
   <n-message-provider>
   <div id="app-root">
-    <nav class="navbar">
+    <nav class="navbar" :class="{ 'navbar-transparent': isLoginPage }">
       <div class="navbar-inner">
         <div class="navbar-left">
-          <a href="." class="navbar-brand">OpenIddictUI</a>
+          <router-link to="/" class="navbar-brand">{{ $t('nav.brand') }}</router-link>
           <span v-if="isDev" style="font-size:0.7rem;color:var(--text-muted);background:#f0f0f0;padding:1px 6px;border-radius:3px">{{ isAdmin ? 'ADMIN' : '' }}</span>
           <template v-if="isAdmin">
-            <router-link to="/applications" class="nav-link nav-admin">Application</router-link>
-            <router-link to="/scopes" class="nav-link nav-admin">Scope</router-link>
+            <router-link to="/applications" class="nav-link nav-admin">{{ $t('nav.applications') }}</router-link>
+            <router-link to="/scopes" class="nav-link nav-admin">{{ $t('nav.scopes') }}</router-link>
           </template>
           <template v-if="username">
-            <router-link to="/authorizations" class="nav-link nav-admin">Authorizations</router-link>
+            <router-link to="/authorizations" class="nav-link nav-admin">{{ $t('nav.authorizations') }}</router-link>
           </template>
-          <a v-if="isDev" href="http://localhost:5175" target="_blank" class="nav-link">SPA Client</a>
+          <a v-if="isDev" href="http://localhost:5175" target="_blank" class="nav-link">{{ $t('nav.spaClient') }}</a>
           <span class="navbar-spacer"></span>
+        </div>
+        <!-- 语言切换 -->
+        <div class="navbar-lang" v-if="supportedLangs.length > 1">
+          <button class="lang-btn" v-for="lang in supportedLangs" :key="lang" :class="{ active: locale === lang }" @click="switchLang(lang)">{{ lang === 'zh-CN' ? '中' : 'EN' }}</button>
         </div>
         <!-- 已登录时显示用户名 + 下拉菜单 -->
         <div class="navbar-user" v-if="username">
@@ -30,10 +28,10 @@
             <span class="navbar-arrow" :class="{ open: menuOpen }">&#9662;</span>
           </div>
           <div v-if="menuOpen" class="navbar-menu" @click.stop>
-            <div class="navbar-menu-item" @click="openChangePwdModal">修改密码</div>
-            <div class="navbar-menu-item">个人信息</div>
+            <div class="navbar-menu-item" @click="openChangePwdModal">{{ $t('nav.changePassword') }}</div>
+            <div class="navbar-menu-item">{{ $t('nav.profile') }}</div>
             <div class="navbar-menu-divider"></div>
-            <div class="navbar-menu-item" @click="openLogoutModal">退出</div>
+            <div class="navbar-menu-item" @click="openLogoutModal">{{ $t('nav.logout') }}</div>
           </div>
         </div>
       </div>
@@ -45,30 +43,30 @@
     <!-- 修改密码模态框 -->
     <div v-if="showPwdModal" class="modal-overlay" @click.self="closePwdModal">
       <div class="modal-box modal-form-box">
-        <h2 class="modal-title">修改密码</h2>
+        <h2 class="modal-title">{{ $t('changePassword.title') }}</h2>
         <div v-if="pwdMsg" :class="['alert', pwdOk ? 'alert-success' : 'alert-danger', 'visible']">{{ pwdMsg }}</div>
         <div class="form-group">
-          <label>原密码</label>
-          <input type="password" class="form-control" v-model="pwdOld" placeholder="原密码" maxlength="50" />
+          <label>{{ $t('changePassword.oldPassword') }}</label>
+          <input type="password" class="form-control" v-model="pwdOld" :placeholder="$t('changePassword.oldPassword')" maxlength="50" />
         </div>
         <div class="form-group">
-          <label>新密码</label>
-          <input type="password" class="form-control" v-model="pwdNew" placeholder="新密码" maxlength="32" />
+          <label>{{ $t('changePassword.newPassword') }}</label>
+          <input type="password" class="form-control" v-model="pwdNew" :placeholder="$t('changePassword.newPassword')" maxlength="32" />
         </div>
         <div class="form-group">
-          <label>确认新密码</label>
-          <input type="password" class="form-control" v-model="pwdConfirm" placeholder="确认新密码" maxlength="32" />
+          <label>{{ $t('changePassword.confirmPassword') }}</label>
+          <input type="password" class="form-control" v-model="pwdConfirm" :placeholder="$t('changePassword.confirmPassword')" maxlength="32" />
         </div>
         <div class="form-group">
-          <label>验证码</label>
+          <label>{{ $t('changePassword.captcha') }}</label>
           <div class="captcha-row">
-            <input class="form-control" v-model="pwdCaptcha" placeholder="验证码" />
+            <input class="form-control" v-model="pwdCaptcha" :placeholder="$t('changePassword.captcha')" />
             <img :src="pwdCaptchaSrc" class="captcha-img" @click="refreshPwdCaptcha" alt=""/>
           </div>
         </div>
         <div class="modal-actions" style="margin-top:1rem">
-          <button class="btn btn-primary" @click="submitChangePwd">确认修改</button>
-          <button class="btn btn-secondary" @click="closePwdModal">取消</button>
+          <button class="btn btn-primary" @click="submitChangePwd">{{ $t('changePassword.submit') }}</button>
+          <button class="btn btn-secondary" @click="closePwdModal">{{ $t('changePassword.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -76,10 +74,10 @@
     <!-- 退出确认模态框 -->
     <div v-if="showLogoutModal" class="modal-overlay" @click.self="showLogoutModal = false">
       <div class="modal-box">
-        <p class="modal-title">确认退出登录？</p>
+        <p class="modal-title">{{ $t('nav.confirmLogout') }}</p>
         <div class="modal-actions">
-          <button class="btn btn-primary" @click="doLogout">确认</button>
-          <button class="btn btn-secondary" @click="showLogoutModal = false">取消</button>
+          <button class="btn btn-primary" @click="doLogout">{{ $t('nav.confirmLogoutBtn') }}</button>
+          <button class="btn btn-secondary" @click="showLogoutModal = false">{{ $t('nav.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -89,9 +87,23 @@
   </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useSession } from './composables/useSession'
-import { changePassword, logout as apiLogout, captchaImageUrl } from './services/api'
+import { changePassword, logout as apiLogout, captchaImage } from './services/api'
+import { setLocale, getSupportedLangs } from './locales'
+
+const { locale, t } = useI18n()
+const route = useRoute()
+const isLoginPage = computed(() => route.path === '/account/login')
+const naiveLocaleMap = inject<Record<string, { locale: any; dateLocale: any }>>('naiveLocale')!
+const naiveLocale = computed(() => naiveLocaleMap[locale.value] || naiveLocaleMap['en-US'])
+
+function switchLang(lang: string) {
+  locale.value = lang as 'zh-CN' | 'en-US'
+  setLocale(lang)
+}
 
 const themeOverrides: Record<string, Record<string, string>> = {
   common: {
@@ -112,10 +124,10 @@ const { username, session, load } = useSession()
 const menuOpen = ref(false)
 const showLogoutModal = ref(false)
 const isDev = import.meta.env.DEV
+const supportedLangs = ref(getSupportedLangs())
 const isAdmin = computed(() => {
   const u = username.value
   const c = session.value.claims
-  // username 是 "admin"，或任意 claim 值为 "admin"
   return u === 'admin' || c.some(x => x.value === 'admin')
 })
 
@@ -129,8 +141,6 @@ const pwdCaptchaSrc = ref('')
 const pwdMsg = ref('')
 const pwdOk = ref(false)
 
-// 预加载 session 数据：router 守卫也会调用 load()
-// 由于 useSession 内部已做并发去重，两个调用共享同一请求，不会重复
 onMounted(async () => {
   await load()
 })
@@ -156,13 +166,12 @@ function openChangePwdModal() {
   showPwdModal.value = true
 }
 function closePwdModal() { showPwdModal.value = false }
-function refreshPwdCaptcha() { pwdCaptchaSrc.value = captchaImageUrl() }
+async function refreshPwdCaptcha() { pwdCaptchaSrc.value = await captchaImage() }
 
 async function submitChangePwd() {
   pwdMsg.value = ''
-  // 前端校验
-  if (!pwdOld.value || !pwdNew.value || !pwdConfirm.value) { pwdMsg.value = '请填写完整'; pwdOk.value = false; return }
-  if (pwdNew.value !== pwdConfirm.value) { pwdMsg.value = '两次新密码不一致'; pwdOk.value = false; return }
+  if (!pwdOld.value || !pwdNew.value || !pwdConfirm.value) { pwdMsg.value = t('changePassword.fillAll'); pwdOk.value = false; return }
+  if (pwdNew.value !== pwdConfirm.value) { pwdMsg.value = t('changePassword.mismatch'); pwdOk.value = false; return }
 
   const data = await changePassword({
     userName: username.value, oldPassword: pwdOld.value,
@@ -170,17 +179,16 @@ async function submitChangePwd() {
     captchaCode: pwdCaptcha.value, button: 'login'
   }) as { code: number; message?: string }
   if (data.code === 200) {
-    pwdMsg.value = '修改成功'
+    pwdMsg.value = t('changePassword.success')
     pwdOk.value = true
     setTimeout(() => { closePwdModal() }, 1200)
   } else {
-    pwdMsg.value = data.message || '修改失败'
+    pwdMsg.value = data.message || t('changePassword.failed')
     pwdOk.value = false
     refreshPwdCaptcha()
   }
 }
 
-// 退出
 function openLogoutModal() {
   menuOpen.value = false
   showLogoutModal.value = true
@@ -211,7 +219,11 @@ async function doLogout() {
 .navbar-menu-item:hover { background: #f8fafc; }
 .navbar-menu-divider { height: 1px; background: var(--border); margin: 0.25rem 0; }
 
-/* 后台管理导航链接 */
+.navbar-lang { display:flex; align-items:center; margin-right:0.75rem; gap:0; }
+.lang-btn { background:none; border:none; cursor:pointer; font-size:0.8125rem; padding:2px 6px; border-radius:3px; color:var(--text-muted); font-family:var(--font); }
+.lang-btn.active { color:var(--primary); font-weight:600; background:rgba(37,99,235,0.08); }
+.lang-divider { color:var(--border); font-size:0.75rem; }
+
 .nav-admin {
   width: 100px; text-align: center; padding: 0.375rem 0; border-radius: var(--radius);
   transition: background 0.15s, color 0.15s;
@@ -220,7 +232,18 @@ async function doLogout() {
 .nav-admin.router-link-exact-active { background: rgba(37,99,235,0.12); color: var(--primary) !important; font-weight: 600; }
 .navbar-spacer { flex: 1; }
 
-/* 模态框 */
+/* 登录页透明导航 */
+.navbar-transparent {
+  background: transparent !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+}
+.navbar-transparent .navbar-brand,
+.navbar-transparent .nav-link,
+.navbar-transparent .lang-btn,
+.navbar-transparent .navbar-username { color: #fff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+.navbar-transparent .lang-btn.active { background: rgba(255,255,255,0.2); color: #fff !important; }
+
 .modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(0,0,0,0.35);
