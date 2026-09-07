@@ -21,7 +21,7 @@ public class PasswordGrantHandler : BaseGrantHandler
         var signInManager = services.GetRequiredService<SignInManager<User>>();
         var scopeManager = services.GetRequiredService<IOpenIddictScopeManager>();
         var logger = services.GetRequiredService<ILogger<PasswordGrantHandler>>();
-        var serviceOptions = context.RequestServices.GetRequiredService<IOptions<OpenIddictUIOptions>>().Value;
+        var serviceOptions = context.RequestServices.GetRequiredService<IOptions<OpenIddictOptions>>().Value;
         var hybridCache = services.GetRequiredService<HybridCache>();
         if (string.IsNullOrEmpty(request.Username))
         {

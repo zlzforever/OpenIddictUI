@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Identity;
 using OpenIddict.Server.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using OpenIddictUI.Grants;
 using OpenIddictUI.Identity;
+using OpenIddictUI.Options;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace OpenIddictUI.Controllers;
@@ -23,6 +25,7 @@ public class AuthorizationController(
     SignInManager<User> signInManager,
     UserManager<User> userManager,
     HybridCache cache,
+    IOptions<OpenIddictOptions> options,
     ILogger<AuthorizationController> logger) : Controller
 {
     /// <summary>
@@ -309,13 +312,13 @@ public class AuthorizationController(
     private string GetRequestUri()
     {
         var path = Request.PathBase + Request.Path + Request.QueryString;
-        var issuer = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["OpenIddictUI:Issuer"];
+        var issuer = options.Value.Issuer;
         return !string.IsNullOrEmpty(issuer) ? $"{issuer.TrimEnd('/')}{path}" : path;
     }
 
     private RedirectResult RedirectToLogin(string returnUrl)
     {
-        var issuer = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["OpenIddictUI:Issuer"];
+        var issuer = options.Value.Issuer;
         var loginUrl = string.IsNullOrEmpty(issuer)
             ? "/account/login"
             : $"{issuer.TrimEnd('/')}/account/login";

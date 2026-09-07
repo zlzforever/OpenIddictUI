@@ -1,6 +1,6 @@
 namespace OpenIddictUI.Options;
 
-public class OpenIddictUIOptions
+public class OpenIddictOptions
 {
     // public bool AutomaticRedirectAfterSignOut { get; set; }
     // public bool AllowLocalLogin { get; set; } = true;
@@ -12,6 +12,7 @@ public class OpenIddictUIOptions
     public string SmsSender { get; set; } = "Console";
     public bool ForcePasswordSecurityPolicy { get; set; }
     public bool ForcePasswordGrantVerifyCaptcha { get; set; }
+    public string Issuer { get; set; }
 
     /// <summary>EF Core 迁移历史表名，默认 "openiddict_migrations_history"。</summary>
     public string MigrationsHistoryTable { get; set; } = "openiddict_migrations_history";

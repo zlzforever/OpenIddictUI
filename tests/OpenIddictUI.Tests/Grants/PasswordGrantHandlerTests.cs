@@ -49,7 +49,7 @@ public class PasswordGrantHandlerTests
 
         services.AddSingleton(scopeManager);
         services.AddSingleton(Mock.Of<HybridCache>());
-        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new OpenIddictUIOptions()));
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new OpenIddictOptions()));
 
         return (new DefaultHttpContext { RequestServices = services.BuildServiceProvider() }, um, sm);
     }

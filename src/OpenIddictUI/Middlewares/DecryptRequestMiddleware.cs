@@ -11,7 +11,7 @@ public class DecryptRequestMiddleware(RequestDelegate next)
     private const string KeyHeader = "Z-Encrypt-Key";
     private static readonly string[] HttpMethods = ["POST", "PUT", "PATCH"];
 
-    public async Task InvokeAsync(HttpContext context, IOptions<OpenIddictUIOptions> serviceOptions,
+    public async Task InvokeAsync(HttpContext context, IOptions<OpenIddictOptions> serviceOptions,
         ILogger<DecryptRequestMiddleware> logger)
     {
         // 仅 POST/PUT/PATCH 需要解密

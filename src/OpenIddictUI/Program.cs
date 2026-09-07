@@ -37,13 +37,17 @@ public partial class Program
         builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
         var config = builder.Configuration;
 
-        builder.Services.Configure<OpenIddictUIOptions>(config.GetSection("OpenIddictUI"));
+        var openiddictOptionSection = config.GetSection("OpenIddict");
+        builder.Services.Configure<OpenIddictOptions>(openiddictOptionSection);
         builder.Services.Configure<IdentityExtensionOptions>(config.GetSection("IdentityExtension"));
         builder.Services.Configure<IdentityOptions>(config.GetSection("Identity"));
         builder.Services.Configure<CookiePolicyOptions>(config.GetSection("CookiePolicy"));
-
-        var migrationsTable = config.GetValue<string>("OpenIddictUIOptions:MigrationsHistoryTable")
-                              ?? "openiddict_migrations_history";
+        var openiddictOptions = openiddictOptionSection.Exists()
+            ? openiddictOptionSection.Get<OpenIddictOptions>() ?? new OpenIddictOptions()
+            : new OpenIddictOptions();
+        var migrationsTable = string.IsNullOrWhiteSpace(openiddictOptions.MigrationsHistoryTable)
+            ? "openiddict_migrations_history"
+            : openiddictOptions.MigrationsHistoryTable;
 
         builder.Services.AddHealthChecks();
         builder.Services.AddDbContextPool<AppDbContext>(options =>
@@ -52,6 +56,28 @@ public partial class Program
                 npgsql => npgsql.MigrationsHistoryTable(migrationsTable));
             options.UseOpenIddict();
         });
+        builder.Services.AddDistributedPostgresCache(options =>
+        {
+            options.ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            options.SchemaName = builder.Configuration.GetValue<string>("PostgresCache:SchemaName", "public");
+            options.TableName = builder.Configuration.GetValue<string>("PostgresCache:TableName", "cache");
+            options.CreateIfNotExists = builder.Configuration.GetValue("PostgresCache:CreateIfNotExists", true);
+            options.UseWAL = builder.Configuration.GetValue("PostgresCache:UseWAL", false);
+
+            var expirationInterval =
+                builder.Configuration.GetValue<string>("PostgresCache:ExpiredItemsDeletionInterval");
+            if (!string.IsNullOrEmpty(expirationInterval) && TimeSpan.TryParse(expirationInterval, out var interval))
+            {
+                options.ExpiredItemsDeletionInterval = interval;
+            }
+
+            var slidingExpiration = builder.Configuration.GetValue<string>("PostgresCache:DefaultSlidingExpiration");
+            if (!string.IsNullOrEmpty(slidingExpiration) && TimeSpan.TryParse(slidingExpiration, out var sliding))
+            {
+                options.DefaultSlidingExpiration = sliding;
+            }
+        });
+        builder.Services.AddHybridCache();
 
         builder.Services.AddIdentity<User, IdentityRole>(options =>
             {
@@ -78,29 +104,6 @@ public partial class Program
         builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.TwoFactorUserIdScheme,
             builder.Configuration.GetSection("TwoFactorUserIdCookieAuthentication"));
 
-        builder.Services.AddDistributedPostgresCache(options =>
-        {
-            options.ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-            options.SchemaName = builder.Configuration.GetValue<string>("PostgresCache:SchemaName", "public");
-            options.TableName = builder.Configuration.GetValue<string>("PostgresCache:TableName", "cache");
-            options.CreateIfNotExists = builder.Configuration.GetValue("PostgresCache:CreateIfNotExists", true);
-            options.UseWAL = builder.Configuration.GetValue("PostgresCache:UseWAL", false);
-
-            var expirationInterval =
-                builder.Configuration.GetValue<string>("PostgresCache:ExpiredItemsDeletionInterval");
-            if (!string.IsNullOrEmpty(expirationInterval) && TimeSpan.TryParse(expirationInterval, out var interval))
-            {
-                options.ExpiredItemsDeletionInterval = interval;
-            }
-
-            var slidingExpiration = builder.Configuration.GetValue<string>("PostgresCache:DefaultSlidingExpiration");
-            if (!string.IsNullOrEmpty(slidingExpiration) && TimeSpan.TryParse(slidingExpiration, out var sliding))
-            {
-                options.DefaultSlidingExpiration = sliding;
-            }
-        });
-        builder.Services.AddHybridCache();
-
         // Grant handlers — AddGrant<T> 同时注册 keyed（查找）和非 keyed（枚举）
         builder.Services.AddGrant<PasswordGrantHandler>(PasswordGrantHandler.GrantType);
         builder.Services.AddGrant<PhoneCodeGrantHandler>(PhoneCodeGrantHandler.GrantType);
@@ -116,7 +119,7 @@ public partial class Program
                     .SetEndSessionEndpointUris("/connect/logout")
                     .SetUserInfoEndpointUris("/connect/userinfo");
 
-                var issuer = config["OpenIddictUI:Issuer"];
+                var issuer = openiddictOptions.Issuer;
                 if (!string.IsNullOrEmpty(issuer))
                 {
                     var baseUrl = issuer.TrimEnd('/');

@@ -25,7 +25,7 @@ public class AccountController(
     HybridCache cache,
     IAntiforgery antiforgery,
     IPasswordValidator<User> passwordValidator,
-    IOptions<OpenIddictUIOptions> options,
+    IOptions<OpenIddictOptions> options,
     ILogger<AccountController> logger) : Controller
 {
     /// <summary>

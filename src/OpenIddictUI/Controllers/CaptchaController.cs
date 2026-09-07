@@ -10,7 +10,7 @@ namespace OpenIddictUI.Controllers;
 
 [Route("api/v1.0/captcha")]
 public class CaptchaController(
-    IOptions<OpenIddictUIOptions> options,
+    IOptions<OpenIddictOptions> options,
     HybridCache hybridCache,
     ILogger<CaptchaController> logger) : Controller
 {
