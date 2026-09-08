@@ -18,6 +18,14 @@ cd frontend && npm run build
 cd client-spa && npm run dev -- --port 5175
 ```
 
+## 数据库配置与部署
+
+STS 支持 PostgreSQL 和 MySQL 8.0+。完整的 provider 选择、`DefaultConnection`、缓存表准备、EF migration、集成验证、上线及回滚说明见 [`docs/database-deployment.md`](docs/database-deployment.md)。
+
+- 根配置 `Database` 缺省为 PostgreSQL；`postgres`、兼容别名 `postgre` 和 `mysql` 为有效值，空值或其他值会使应用启动失败。
+- PostgreSQL 与 MySQL 的 EF provider 和分布式缓存都会使用 `ConnectionStrings:DefaultConnection`，不会在数据库不可用时降级到内存缓存。
+- MySQL 仅支持 8.0 及以上版本，不承诺 MySQL 5.7 或 MariaDB；应用启动时会准备并校验 MySQL 缓存表。
+
 ## 项目结构
 
 ```
