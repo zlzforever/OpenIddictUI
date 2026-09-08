@@ -77,6 +77,14 @@ internal sealed class MySqlCacheSettings
         var expiredItemsDeletionInterval = ParseOptionalTimeSpan(
             configuration["MySqlCache:ExpiredItemsDeletionInterval"],
             "MySqlCache:ExpiredItemsDeletionInterval");
+        if (expiredItemsDeletionInterval is { } interval && interval <= TimeSpan.Zero)
+        {
+            throw InvalidValue(
+                "MySqlCache:ExpiredItemsDeletionInterval",
+                configuration["MySqlCache:ExpiredItemsDeletionInterval"],
+                "the value must be positive");
+        }
+
         var defaultSlidingExpiration = ParseTimeSpan(
             configuration["MySqlCache:DefaultSlidingExpiration"],
             "MySqlCache:DefaultSlidingExpiration",

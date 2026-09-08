@@ -1,10 +1,18 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using MySqlConnector;
 
 namespace OpenIddictUI.Data;
+
+internal interface IMySqlStartupConnection : IAsyncDisposable
+{
+    Task OpenAsync(CancellationToken cancellationToken);
+
+    Task<string?> ReadServerVersionAsync(CancellationToken cancellationToken);
+
+    Task EnsureCacheTableAsync(MySqlCacheSettings settings, CancellationToken cancellationToken);
+}
 
 public static class DatabaseStartup
 {
@@ -19,15 +27,15 @@ public static class DatabaseStartup
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var cache = services.GetRequiredService<IDistributedCache>();
         if (provider == DatabaseProvider.Postgres)
         {
-            await ProbeCacheAsync(cache, cancellationToken);
             return;
         }
 
+        var cache = services.GetRequiredService<IDistributedCache>();
         var settings = services.GetRequiredService<MySqlCacheSettings>();
-        await InitializeMySqlAsync(settings, cache, cancellationToken);
+        await using var connection = new MySqlStartupConnection(settings.ConnectionString);
+        await InitializeMySqlAsync(settings, cache, connection, cancellationToken);
     }
 
     internal static bool IsSupportedMySqlVersion(string? serverVersion, out Version? parsedVersion)
@@ -55,26 +63,30 @@ public static class DatabaseStartup
         return parsedVersion >= new Version(8, 0, 0);
     }
 
-    private static async Task InitializeMySqlAsync(
+    internal static async Task InitializeMySqlAsync(
         MySqlCacheSettings settings,
         IDistributedCache cache,
-        CancellationToken cancellationToken)
+        IMySqlStartupConnection connection,
+        CancellationToken cancellationToken = default)
     {
-        await using var connection = new MySqlConnection(settings.ConnectionString);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(connection);
+
         await connection.OpenAsync(cancellationToken);
 
-        var serverVersion = await ReadServerVersionAsync(connection, cancellationToken);
-        if (!IsSupportedMySqlVersion(serverVersion, out var parsedVersion))
+        var serverVersion = await connection.ReadServerVersionAsync(cancellationToken);
+        if (!IsSupportedMySqlVersion(serverVersion, out _))
         {
             throw new InvalidOperationException(
                 $"MySQL server version '{serverVersion}' is unsupported. MySQL 8.0 or newer is required.");
         }
 
-        await EnsureCacheTableAsync(connection, settings, cancellationToken);
+        await connection.EnsureCacheTableAsync(settings, cancellationToken);
         await ProbeCacheAsync(cache, cancellationToken);
     }
 
-    private static async Task<string> ReadServerVersionAsync(
+    private static async Task<string?> ReadServerVersionAsync(
         MySqlConnection connection,
         CancellationToken cancellationToken)
     {
@@ -125,11 +137,11 @@ public static class DatabaseStartup
         command.Parameters.AddWithValue("@schema", settings.SchemaName);
         command.Parameters.AddWithValue("@table", settings.TableName);
 
-        var columns = new Dictionary<string, CacheColumn>(StringComparer.OrdinalIgnoreCase);
+        var columns = new Dictionary<string, CacheColumnDefinition>(StringComparer.OrdinalIgnoreCase);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            columns[reader.GetString(0)] = new CacheColumn(
+            columns[reader.GetString(0)] = new CacheColumnDefinition(
                 reader.GetString(1),
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetInt64(3),
@@ -137,11 +149,7 @@ public static class DatabaseStartup
                 reader.IsDBNull(5) ? null : reader.GetString(5));
         }
 
-        RequireColumn(columns, "Id", "varchar", "NO", 449, null, "ascii_bin");
-        RequireColumn(columns, "Value", "longblob", "NO", null, null, null);
-        RequireColumn(columns, "ExpiresAtTime", "datetime", "NO", null, 6, null);
-        RequireColumn(columns, "SlidingExpirationInSeconds", "bigint", "YES", null, null, null);
-        RequireColumn(columns, "AbsoluteExpiration", "datetime", "YES", null, 6, null);
+        ValidateCacheColumns(columns);
     }
 
     private static async Task ValidateCacheIndexesAsync(
@@ -159,12 +167,33 @@ public static class DatabaseStartup
         command.Parameters.AddWithValue("@schema", settings.SchemaName);
         command.Parameters.AddWithValue("@table", settings.TableName);
 
-        var indexes = new List<CacheIndex>();
+        var indexes = new List<CacheIndexDefinition>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            indexes.Add(new CacheIndex(reader.GetString(0), reader.GetString(1), reader.GetInt32(2)));
+            indexes.Add(new CacheIndexDefinition(reader.GetString(0), reader.GetString(1), reader.GetInt32(2)));
         }
+
+        ValidateCacheIndexes(indexes, $"{settings.SchemaName}.{settings.TableName}");
+    }
+
+    internal static void ValidateCacheColumns(
+        IReadOnlyDictionary<string, CacheColumnDefinition> columns)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        RequireColumn(columns, "Id", "varchar", "NO", 449, null, "ascii_bin");
+        RequireColumn(columns, "Value", "longblob", "NO", null, null, null);
+        RequireColumn(columns, "ExpiresAtTime", "datetime", "NO", null, 6, null);
+        RequireColumn(columns, "SlidingExpirationInSeconds", "bigint", "YES", null, null, null);
+        RequireColumn(columns, "AbsoluteExpiration", "datetime", "YES", null, 6, null);
+    }
+
+    internal static void ValidateCacheIndexes(
+        IReadOnlyCollection<CacheIndexDefinition> indexes,
+        string? tableName = null)
+    {
+        ArgumentNullException.ThrowIfNull(indexes);
 
         if (!indexes.Any(index =>
                 string.Equals(index.Name, "PRIMARY", StringComparison.OrdinalIgnoreCase) &&
@@ -172,7 +201,7 @@ public static class DatabaseStartup
                 index.Sequence == 1))
         {
             throw new InvalidOperationException(
-                $"MySQL cache table '{settings.SchemaName}.{settings.TableName}' must have a primary key on 'Id'.");
+                $"MySQL cache table{FormatTableName(tableName)} must have a primary key on 'Id'.");
         }
 
         if (!indexes.Any(index =>
@@ -180,12 +209,15 @@ public static class DatabaseStartup
                 index.Sequence == 1))
         {
             throw new InvalidOperationException(
-                $"MySQL cache table '{settings.SchemaName}.{settings.TableName}' must have an index on 'ExpiresAtTime'.");
+                $"MySQL cache table{FormatTableName(tableName)} must have an index on 'ExpiresAtTime'.");
         }
     }
 
+    private static string FormatTableName(string? tableName) =>
+        tableName is null ? string.Empty : $" '{tableName}'";
+
     private static void RequireColumn(
-        IReadOnlyDictionary<string, CacheColumn> columns,
+        IReadOnlyDictionary<string, CacheColumnDefinition> columns,
         string name,
         string dataType,
         string nullable,
@@ -213,12 +245,30 @@ public static class DatabaseStartup
 
     private static string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";
 
-    private sealed record CacheColumn(
+    private sealed class MySqlStartupConnection(string connectionString) : IMySqlStartupConnection
+    {
+        private readonly MySqlConnection _connection = new(connectionString);
+
+        public Task OpenAsync(CancellationToken cancellationToken) =>
+            _connection.OpenAsync(cancellationToken);
+
+        public Task<string?> ReadServerVersionAsync(CancellationToken cancellationToken) =>
+            DatabaseStartup.ReadServerVersionAsync(_connection, cancellationToken);
+
+        public Task EnsureCacheTableAsync(
+            MySqlCacheSettings settings,
+            CancellationToken cancellationToken) =>
+            DatabaseStartup.EnsureCacheTableAsync(_connection, settings, cancellationToken);
+
+        public ValueTask DisposeAsync() => _connection.DisposeAsync();
+    }
+
+    internal sealed record CacheColumnDefinition(
         string DataType,
         string IsNullable,
         long? CharacterMaximumLength,
         int? DateTimePrecision,
         string? CollationName);
 
-    private sealed record CacheIndex(string Name, string Column, int Sequence);
+    internal sealed record CacheIndexDefinition(string Name, string Column, int Sequence);
 }
