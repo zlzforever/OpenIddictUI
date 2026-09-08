@@ -102,26 +102,33 @@ public static class DatabaseStartup
         MySqlCacheSettings settings,
         CancellationToken cancellationToken)
     {
-        var qualifiedTableName =
-            $"{QuoteIdentifier(settings.SchemaName)}.{QuoteIdentifier(settings.TableName)}";
-        await using (var command = connection.CreateCommand())
+        try
         {
-            command.CommandText = $"""
-                CREATE TABLE IF NOT EXISTS {qualifiedTableName} (
-                    `Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-                    `Value` longblob NOT NULL,
-                    `ExpiresAtTime` datetime(6) NOT NULL,
-                    `SlidingExpirationInSeconds` bigint NULL,
-                    `AbsoluteExpiration` datetime(6) NULL,
-                    PRIMARY KEY (`Id`),
-                    KEY `ix_expires_at_time` (`ExpiresAtTime`)
-                ) ENGINE=InnoDB;
-                """;
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
+            var qualifiedTableName =
+                $"{QuoteIdentifier(settings.SchemaName)}.{QuoteIdentifier(settings.TableName)}";
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = $"""
+                    CREATE TABLE IF NOT EXISTS {qualifiedTableName} (
+                        `Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                        `Value` longblob NOT NULL,
+                        `ExpiresAtTime` datetime(6) NOT NULL,
+                        `SlidingExpirationInSeconds` bigint NULL,
+                        `AbsoluteExpiration` datetime(6) NULL,
+                        PRIMARY KEY (`Id`),
+                        KEY `ix_expires_at_time` (`ExpiresAtTime`)
+                    ) ENGINE=InnoDB;
+                    """;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
 
-        await ValidateCacheColumnsAsync(connection, settings, cancellationToken);
-        await ValidateCacheIndexesAsync(connection, settings, cancellationToken);
+            await ValidateCacheColumnsAsync(connection, settings, cancellationToken);
+            await ValidateCacheIndexesAsync(connection, settings, cancellationToken);
+        }
+        catch (DbException exception) when (ContainsConfiguredPassword(exception, settings.ConnectionString))
+        {
+            throw new SanitizedProviderException(exception);
+        }
     }
 
     private static async Task ValidateCacheColumnsAsync(
@@ -244,6 +251,13 @@ public static class DatabaseStartup
         await cache.GetAsync(CacheProbeKey, cancellationToken);
     }
 
+    private static bool ContainsConfiguredPassword(Exception exception, string connectionString)
+    {
+        var password = new MySqlConnectionStringBuilder(connectionString).Password;
+        return !string.IsNullOrEmpty(password) &&
+               exception.ToString().Contains(password, StringComparison.Ordinal);
+    }
+
     internal static string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";
 
     internal sealed class MySqlStartupConnection : IMySqlStartupConnection
@@ -272,6 +286,22 @@ public static class DatabaseStartup
             DatabaseStartup.EnsureCacheTableAsync(_connection, settings, cancellationToken);
 
         public ValueTask DisposeAsync() => _connection.DisposeAsync();
+    }
+
+    private sealed class SanitizedProviderException : InvalidOperationException
+    {
+        public SanitizedProviderException(Exception innerException)
+            : base("MySQL provider error omitted sensitive connection details.", innerException)
+        {
+        }
+
+        public override string ToString()
+        {
+            var stackTrace = StackTrace;
+            return stackTrace is null
+                ? $"{GetType().FullName}: {Message}"
+                : $"{GetType().FullName}: {Message}{Environment.NewLine}{stackTrace}";
+        }
     }
 
     private static void AddParameter(DbCommand command, string name, object value)

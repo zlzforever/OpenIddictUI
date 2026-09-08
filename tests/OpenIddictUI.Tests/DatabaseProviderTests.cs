@@ -602,13 +602,14 @@ public class DatabaseProviderTests
             settings,
             CancellationToken.None);
 
-        var exception = await action.Should().ThrowAsync<ProviderLikeDbException>();
+        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
 
-        exception.Which.Should().BeSameAs(expected);
         expected.Should().NotBeNull();
         expected!.ConnectionString.Should().Be(settings.ConnectionString);
         expected.ConnectionString.Should().Contain(password);
         expected.Data["ConnectionString"].Should().Be(settings.ConnectionString);
+        expected.ToString().Should().Contain(password);
+        exception.Which.InnerException.Should().BeSameAs(expected);
         exception.Which.ToString().Should().NotContain(password);
         connection.Commands.Should().HaveCount(3);
         connection.Commands[1].CommandText.Should().Contain("FROM information_schema.COLUMNS");
@@ -914,7 +915,7 @@ public class DatabaseProviderTests
     private sealed class ProviderLikeDbException : DbException
     {
         public ProviderLikeDbException(string connectionString)
-            : base("MySQL provider failed while querying the cache index.")
+            : base($"MySQL provider failed for connection '{connectionString}' while querying the cache index.")
         {
             ConnectionString = connectionString;
             Data["ConnectionString"] = connectionString;
