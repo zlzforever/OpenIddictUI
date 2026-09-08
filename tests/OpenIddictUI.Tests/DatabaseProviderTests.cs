@@ -510,13 +510,35 @@ public class DatabaseProviderTests
     }
 
     [Fact]
-    public async Task ReadServerVersion_ConvertsNullScalarToEmptyString()
+    public async Task ReadServerVersion_WhenScalarIsNull_ReturnsEmptyString()
     {
-        var connection = new RecordingDbConnection(new RecordingCommandPlan { ScalarResult = null });
+        var connection = new RecordingDbConnection(
+            new RecordingCommandPlan { ScalarResult = null });
 
         var version = await DatabaseStartup.ReadServerVersionAsync(connection, CancellationToken.None);
 
         version.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReadServerVersion_WhenScalarConversionReturnsNull_UsesFallbackBeforeSchemaValidation()
+    {
+        var settings = CreateMySqlCacheSettings();
+        var connection = new RecordingDbConnection(
+            new RecordingCommandPlan { ScalarResult = new NullStringScalar() },
+            new RecordingCommandPlan(),
+            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
+            new RecordingCommandPlan { Rows = CreateValidCacheIndexRows() });
+        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
+
+        var version = await startupConnection.ReadServerVersionAsync(CancellationToken.None);
+        await startupConnection.EnsureCacheTableAsync(settings, CancellationToken.None);
+
+        version.Should().BeEmpty();
+        DatabaseStartup.IsSupportedMySqlVersion(version, out _).Should().BeFalse();
+        connection.Commands.Should().HaveCount(4);
+        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
+        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
     }
 
     [Fact]
@@ -551,6 +573,35 @@ public class DatabaseProviderTests
         var exception = await action.Should().ThrowAsync<InvalidOperationException>();
         exception.Which.Should().BeSameAs(expected);
         connection.Commands.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task EnsureCacheTable_PropagatesIndexQueryFailureWithoutLeakingPassword()
+    {
+        const string password = "mysql-index-secret";
+        var settings = CreateMySqlCacheSettings(
+            $"Server=localhost;Database=openid;User ID=app;Password={password};");
+        var expected = new InvalidOperationException("index query failed");
+        var connection = new RecordingDbConnection(
+            new RecordingCommandPlan(),
+            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
+            new RecordingCommandPlan { Exception = expected })
+        {
+            ConnectionString = settings.ConnectionString
+        };
+
+        var action = () => DatabaseStartup.EnsureCacheTableAsync(
+            connection,
+            settings,
+            CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
+
+        exception.Which.Should().BeSameAs(expected);
+        exception.Which.ToString().Should().NotContain(password);
+        connection.Commands.Should().HaveCount(3);
+        connection.Commands[1].CommandText.Should().Contain("FROM information_schema.COLUMNS");
+        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.STATISTICS");
     }
 
     [Theory]
@@ -841,6 +892,11 @@ public class DatabaseProviderTests
         ["PRIMARY", "Id", 1],
         ["ix_expires_at_time", "ExpiresAtTime", 1]
     ];
+
+    private sealed class NullStringScalar
+    {
+        public override string ToString() => null!;
+    }
 
     private sealed class StubMySqlStartupConnection : IMySqlStartupConnection
     {
