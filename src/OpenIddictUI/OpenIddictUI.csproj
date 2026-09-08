@@ -12,7 +12,9 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="Microting.EntityFrameworkCore.MySql" Version="10.0.8"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.6.0"/>
+        <PackageReference Include="Pomelo.Extensions.Caching.MySql" Version="2.2.1"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Postgres" Version="1.2.2"/>
         <PackageReference Include="OpenIddict.AspNetCore" Version="7.5.0"/>
         <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.0.0"/>

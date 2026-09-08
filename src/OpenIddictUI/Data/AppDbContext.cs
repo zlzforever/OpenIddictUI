@@ -7,32 +7,53 @@ using OpenIddictUI.Options;
 
 namespace OpenIddictUI.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<IdentityExtensionOptions> identityOptions)
-    : IdentityDbContext<User>(options)
+public class AppDbContext : IdentityDbContext<User>
 {
-    private readonly IdentityExtensionOptions _identityOptions = identityOptions.Value;
+    private readonly IdentityExtensionOptions _identityOptions;
+
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        IOptions<IdentityExtensionOptions> identityOptions)
+        : this((DbContextOptions)options, identityOptions)
+    {
+    }
+
+    protected AppDbContext(
+        DbContextOptions options,
+        IOptions<IdentityExtensionOptions> identityOptions)
+        : base(options)
+    {
+        _identityOptions = identityOptions.Value;
+    }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        AppDbContextModelConfiguration.Configure(builder, _identityOptions);
+    }
+}
 
+internal static class AppDbContextModelConfiguration
+{
+    public static void Configure(ModelBuilder builder, IdentityExtensionOptions identityOptions)
+    {
         // 注册 OpenIddict 实体映射（Applications/Scopes/Authorizations/Tokens 表）
         builder.UseOpenIddict();
 
         // Identity 表由外部用户管理系统维护，不纳入 EF Migration
-        ConfigureIdentityTables(builder);
+        ConfigureIdentityTables(builder, identityOptions);
 
         // 软删除：通过全局查询过滤器自动过滤 IsDeleted=true 的记录
-        ConfigureSoftDelete(builder);
+        ConfigureSoftDelete(builder, identityOptions);
 
         // 所有表名、列名、索引名、外键名统一转为 lowercase_snake_case
         ApplySnakeCaseNaming(builder);
     }
 
     // 映射 Identity 表到可配置的表名，并排除出 Migration
-    private void ConfigureIdentityTables(ModelBuilder builder)
+    private static void ConfigureIdentityTables(ModelBuilder builder, IdentityExtensionOptions identityOptions)
     {
-        var t = _identityOptions.Tables;
+        var t = identityOptions.Tables;
         builder.Entity<User>().ToTable(t.Users, tb => tb.ExcludeFromMigrations());
         builder.Entity<IdentityRole>().ToTable(t.Roles, tb => tb.ExcludeFromMigrations());
         builder.Entity<IdentityUserRole<string>>().ToTable(t.UserRoles, tb => tb.ExcludeFromMigrations());
@@ -44,9 +65,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Ident
 
     // 软删除列名来自 IdentityExtensionOptions.SoftDeleteColumn，为 null 则跳过
     // HasQueryFilter 使用实体属性名 IsDeleted（非数据库列名），EF Core 自动映射
-    private void ConfigureSoftDelete(ModelBuilder builder)
+    private static void ConfigureSoftDelete(ModelBuilder builder, IdentityExtensionOptions identityOptions)
     {
-        var col = _identityOptions.SoftDeleteColumn;
+        var col = identityOptions.SoftDeleteColumn;
         if (string.IsNullOrEmpty(col))
         {
             return;
