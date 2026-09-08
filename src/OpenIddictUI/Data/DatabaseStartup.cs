@@ -74,17 +74,26 @@ public static class DatabaseStartup
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(connection);
 
-        await connection.OpenAsync(cancellationToken);
-
-        var serverVersion = await connection.ReadServerVersionAsync(cancellationToken);
-        if (!IsSupportedMySqlVersion(serverVersion, out _))
+        try
         {
-            throw new InvalidOperationException(
-                $"MySQL server version '{serverVersion}' is unsupported. MySQL 8.0 or newer is required.");
-        }
+            await connection.OpenAsync(cancellationToken);
 
-        await connection.EnsureCacheTableAsync(settings, cancellationToken);
-        await ProbeCacheAsync(cache, cancellationToken);
+            var serverVersion = await connection.ReadServerVersionAsync(cancellationToken);
+            if (!IsSupportedMySqlVersion(serverVersion, out _))
+            {
+                throw new InvalidOperationException(
+                    $"MySQL server version '{serverVersion}' is unsupported. MySQL 8.0 or newer is required.");
+            }
+
+            await connection.EnsureCacheTableAsync(settings, cancellationToken);
+            await ProbeCacheAsync(cache, cancellationToken);
+        }
+        catch (DbException exception)
+        {
+            throw new SanitizedDatabaseStartupException(
+                "MySQL startup database operation failed.",
+                exception);
+        }
     }
 
     internal static async Task<string?> ReadServerVersionAsync(
@@ -242,6 +251,22 @@ public static class DatabaseStartup
     private static async Task ProbeCacheAsync(IDistributedCache cache, CancellationToken cancellationToken)
     {
         await cache.GetAsync(CacheProbeKey, cancellationToken);
+    }
+
+    private sealed class SanitizedDatabaseStartupException : InvalidOperationException
+    {
+        public SanitizedDatabaseStartupException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+
+        public override string ToString()
+        {
+            var stackTrace = StackTrace;
+            return stackTrace is null
+                ? $"{GetType().FullName}: {Message}"
+                : $"{GetType().FullName}: {Message}{Environment.NewLine}{stackTrace}";
+        }
     }
 
     internal static string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";

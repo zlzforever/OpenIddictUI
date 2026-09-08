@@ -576,32 +576,49 @@ public class DatabaseProviderTests
     }
 
     [Fact]
-    public async Task EnsureCacheTable_PropagatesIndexQueryFailureWithoutLeakingPassword()
+    public async Task MySqlInitialization_PropagatesProviderFailureWithoutLeakingPassword()
     {
         const string password = "mysql-index-secret";
         var settings = CreateMySqlCacheSettings(
             $"Server=localhost;Database=openid;User ID=app;Password={password};");
-        var expected = new InvalidOperationException("index query failed");
+        ProviderLikeDbException? expected = null;
         var connection = new RecordingDbConnection(
+            new RecordingCommandPlan { ScalarResult = "8.0.36" },
             new RecordingCommandPlan(),
             new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
-            new RecordingCommandPlan { Exception = expected })
+            new RecordingCommandPlan
+            {
+                ExceptionFactory = connectionString =>
+                {
+                    expected = new ProviderLikeDbException(connectionString);
+                    return expected;
+                }
+            })
         {
             ConnectionString = settings.ConnectionString
         };
+        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
+        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
 
-        var action = () => DatabaseStartup.EnsureCacheTableAsync(
-            connection,
+        var action = () => DatabaseStartup.InitializeMySqlAsync(
             settings,
+            cache.Object,
+            startupConnection,
             CancellationToken.None);
 
         var exception = await action.Should().ThrowAsync<InvalidOperationException>();
 
-        exception.Which.Should().BeSameAs(expected);
+        expected.Should().NotBeNull();
+        expected!.Message.Should().Contain(password);
+        expected.ToString().Should().Contain(password);
+        exception.Which.InnerException.Should().BeSameAs(expected);
         exception.Which.ToString().Should().NotContain(password);
-        connection.Commands.Should().HaveCount(3);
-        connection.Commands[1].CommandText.Should().Contain("FROM information_schema.COLUMNS");
-        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.STATISTICS");
+        connection.Commands.Should().HaveCount(4);
+        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
+        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
+        cache.Verify(
+            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Theory]
@@ -614,6 +631,7 @@ public class DatabaseProviderTests
 
     [Theory]
     [InlineData(null)]
+    [InlineData("")]
     [InlineData("not-a-version")]
     [InlineData("5.7.44")]
     [InlineData("8.0.0-MariaDB")]
@@ -898,6 +916,14 @@ public class DatabaseProviderTests
         public override string ToString() => null!;
     }
 
+    private sealed class ProviderLikeDbException : DbException
+    {
+        public ProviderLikeDbException(string connectionString)
+            : base($"MySQL provider failed while querying the cache index. Connection: {connectionString}")
+        {
+        }
+    }
+
     private sealed class StubMySqlStartupConnection : IMySqlStartupConnection
     {
         public StubMySqlStartupConnection()
@@ -952,6 +978,8 @@ public class DatabaseProviderTests
         public IReadOnlyList<object?[]> Rows { get; init; } = [];
 
         public Exception? Exception { get; init; }
+
+        public Func<string, Exception>? ExceptionFactory { get; init; }
     }
 
     private sealed class RecordingDbConnection : DbConnection
@@ -1086,6 +1114,11 @@ public class DatabaseProviderTests
             if (_plan.Exception is not null)
             {
                 throw _plan.Exception;
+            }
+
+            if (_plan.ExceptionFactory is not null)
+            {
+                throw _plan.ExceptionFactory(DbConnection?.ConnectionString ?? string.Empty);
             }
         }
     }
