@@ -74,17 +74,26 @@ public static class DatabaseStartup
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(connection);
 
-        await connection.OpenAsync(cancellationToken);
-
-        var serverVersion = await connection.ReadServerVersionAsync(cancellationToken);
-        if (!IsSupportedMySqlVersion(serverVersion, out _))
+        try
         {
-            throw new InvalidOperationException(
-                $"MySQL server version '{serverVersion}' is unsupported. MySQL 8.0 or newer is required.");
-        }
+            await connection.OpenAsync(cancellationToken);
 
-        await connection.EnsureCacheTableAsync(settings, cancellationToken);
-        await ProbeCacheAsync(cache, cancellationToken);
+            var serverVersion = await connection.ReadServerVersionAsync(cancellationToken);
+            if (!IsSupportedMySqlVersion(serverVersion, out _))
+            {
+                throw new InvalidOperationException(
+                    $"MySQL server version '{serverVersion}' is unsupported. MySQL 8.0 or newer is required.");
+            }
+
+            await connection.EnsureCacheTableAsync(settings, cancellationToken);
+            await ProbeCacheAsync(cache, cancellationToken);
+        }
+        catch (DbException exception)
+        {
+            throw new SanitizedDatabaseStartupException(
+                "MySQL startup database operation failed.",
+                exception);
+        }
     }
 
     internal static async Task<string?> ReadServerVersionAsync(
@@ -102,33 +111,26 @@ public static class DatabaseStartup
         MySqlCacheSettings settings,
         CancellationToken cancellationToken)
     {
-        try
+        var qualifiedTableName =
+            $"{QuoteIdentifier(settings.SchemaName)}.{QuoteIdentifier(settings.TableName)}";
+        await using (var command = connection.CreateCommand())
         {
-            var qualifiedTableName =
-                $"{QuoteIdentifier(settings.SchemaName)}.{QuoteIdentifier(settings.TableName)}";
-            await using (var command = connection.CreateCommand())
-            {
-                command.CommandText = $"""
-                    CREATE TABLE IF NOT EXISTS {qualifiedTableName} (
-                        `Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-                        `Value` longblob NOT NULL,
-                        `ExpiresAtTime` datetime(6) NOT NULL,
-                        `SlidingExpirationInSeconds` bigint NULL,
-                        `AbsoluteExpiration` datetime(6) NULL,
-                        PRIMARY KEY (`Id`),
-                        KEY `ix_expires_at_time` (`ExpiresAtTime`)
-                    ) ENGINE=InnoDB;
-                    """;
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
+            command.CommandText = $"""
+                CREATE TABLE IF NOT EXISTS {qualifiedTableName} (
+                    `Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                    `Value` longblob NOT NULL,
+                    `ExpiresAtTime` datetime(6) NOT NULL,
+                    `SlidingExpirationInSeconds` bigint NULL,
+                    `AbsoluteExpiration` datetime(6) NULL,
+                    PRIMARY KEY (`Id`),
+                    KEY `ix_expires_at_time` (`ExpiresAtTime`)
+                ) ENGINE=InnoDB;
+                """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
 
-            await ValidateCacheColumnsAsync(connection, settings, cancellationToken);
-            await ValidateCacheIndexesAsync(connection, settings, cancellationToken);
-        }
-        catch (DbException exception) when (ContainsConfiguredPassword(exception, settings.ConnectionString))
-        {
-            throw new SanitizedProviderException(exception);
-        }
+        await ValidateCacheColumnsAsync(connection, settings, cancellationToken);
+        await ValidateCacheIndexesAsync(connection, settings, cancellationToken);
     }
 
     private static async Task ValidateCacheColumnsAsync(
@@ -251,11 +253,20 @@ public static class DatabaseStartup
         await cache.GetAsync(CacheProbeKey, cancellationToken);
     }
 
-    private static bool ContainsConfiguredPassword(Exception exception, string connectionString)
+    private sealed class SanitizedDatabaseStartupException : InvalidOperationException
     {
-        var password = new MySqlConnectionStringBuilder(connectionString).Password;
-        return !string.IsNullOrEmpty(password) &&
-               exception.ToString().Contains(password, StringComparison.Ordinal);
+        public SanitizedDatabaseStartupException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+
+        public override string ToString()
+        {
+            var stackTrace = StackTrace;
+            return stackTrace is null
+                ? $"{GetType().FullName}: {Message}"
+                : $"{GetType().FullName}: {Message}{Environment.NewLine}{stackTrace}";
+        }
     }
 
     internal static string QuoteIdentifier(string identifier) => $"`{identifier.Replace("`", "``")}`";
@@ -286,22 +297,6 @@ public static class DatabaseStartup
             DatabaseStartup.EnsureCacheTableAsync(_connection, settings, cancellationToken);
 
         public ValueTask DisposeAsync() => _connection.DisposeAsync();
-    }
-
-    private sealed class SanitizedProviderException : InvalidOperationException
-    {
-        public SanitizedProviderException(Exception innerException)
-            : base("MySQL provider error omitted sensitive connection details.", innerException)
-        {
-        }
-
-        public override string ToString()
-        {
-            var stackTrace = StackTrace;
-            return stackTrace is null
-                ? $"{GetType().FullName}: {Message}"
-                : $"{GetType().FullName}: {Message}{Environment.NewLine}{stackTrace}";
-        }
     }
 
     private static void AddParameter(DbCommand command, string name, object value)

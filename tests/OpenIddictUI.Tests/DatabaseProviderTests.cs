@@ -576,13 +576,14 @@ public class DatabaseProviderTests
     }
 
     [Fact]
-    public async Task EnsureCacheTable_PropagatesProviderFailureWithoutLeakingPassword()
+    public async Task MySqlInitialization_PropagatesProviderFailureWithoutLeakingPassword()
     {
         const string password = "mysql-index-secret";
         var settings = CreateMySqlCacheSettings(
             $"Server=localhost;Database=openid;User ID=app;Password={password};");
         ProviderLikeDbException? expected = null;
         var connection = new RecordingDbConnection(
+            new RecordingCommandPlan { ScalarResult = "8.0.36" },
             new RecordingCommandPlan(),
             new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
             new RecordingCommandPlan
@@ -596,24 +597,28 @@ public class DatabaseProviderTests
         {
             ConnectionString = settings.ConnectionString
         };
+        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
+        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
 
-        var action = () => DatabaseStartup.EnsureCacheTableAsync(
-            connection,
+        var action = () => DatabaseStartup.InitializeMySqlAsync(
             settings,
+            cache.Object,
+            startupConnection,
             CancellationToken.None);
 
         var exception = await action.Should().ThrowAsync<InvalidOperationException>();
 
         expected.Should().NotBeNull();
-        expected!.ConnectionString.Should().Be(settings.ConnectionString);
-        expected.ConnectionString.Should().Contain(password);
-        expected.Data["ConnectionString"].Should().Be(settings.ConnectionString);
+        expected!.Message.Should().Contain(password);
         expected.ToString().Should().Contain(password);
         exception.Which.InnerException.Should().BeSameAs(expected);
         exception.Which.ToString().Should().NotContain(password);
-        connection.Commands.Should().HaveCount(3);
-        connection.Commands[1].CommandText.Should().Contain("FROM information_schema.COLUMNS");
-        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.STATISTICS");
+        connection.Commands.Should().HaveCount(4);
+        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
+        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
+        cache.Verify(
+            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Theory]
@@ -645,7 +650,6 @@ public class DatabaseProviderTests
 
         exception.Which.Message.Should().Contain("unsupported");
         connection.Calls.Should().Equal("open", "version");
-        connection.Calls.Should().NotContain("ensure-cache-table");
         cache.Verify(
             item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
             Times.Never);
@@ -915,13 +919,9 @@ public class DatabaseProviderTests
     private sealed class ProviderLikeDbException : DbException
     {
         public ProviderLikeDbException(string connectionString)
-            : base($"MySQL provider failed for connection '{connectionString}' while querying the cache index.")
+            : base($"MySQL provider failed while querying the cache index. Connection: {connectionString}")
         {
-            ConnectionString = connectionString;
-            Data["ConnectionString"] = connectionString;
         }
-
-        public string ConnectionString { get; }
     }
 
     private sealed class StubMySqlStartupConnection : IMySqlStartupConnection
