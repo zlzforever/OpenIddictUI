@@ -1,4 +1,10 @@
+using System.Collections;
+using System.Data;
+using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Postgres;
 using Microsoft.Extensions.Configuration;
@@ -103,6 +109,12 @@ public class DatabaseProviderTests
     {
         DatabaseStartup.IsSupportedMySqlVersion(value, out var parsed).Should().BeFalse();
         parsed.Should().BeNull();
+    }
+
+    [Fact]
+    public void UnsupportedMySqlVersion_WithUnrepresentablePatch_IsRejected()
+    {
+        DatabaseStartup.IsSupportedMySqlVersion("7.9.99999999999999999999", out _).Should().BeFalse();
     }
 
     [Theory]
@@ -292,6 +304,37 @@ public class DatabaseProviderTests
     }
 
     [Fact]
+    public void MigrationAssembliesAndScripts_AreIsolatedByProvider()
+    {
+        var identityOptions = Microsoft.Extensions.Options.Options.Create(new IdentityExtensionOptions());
+        var postgresOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(
+                "Host=localhost;Database=openid;",
+                options => options.MigrationsAssembly(typeof(AppDbContext).Assembly.GetName().Name))
+            .Options;
+        var mySqlOptions = new DbContextOptionsBuilder<MySqlAppDbContext>()
+            .UseMySql(
+                "Server=localhost;Database=openid;",
+                new MySqlServerVersion(new Version(8, 0, 0)),
+                options => options.MigrationsAssembly(typeof(MySqlAppDbContext).Assembly.GetName().Name))
+            .Options;
+
+        using var postgres = new AppDbContext(postgresOptions, identityOptions);
+        using var mySql = new MySqlAppDbContext(mySqlOptions, identityOptions);
+
+        ReferenceEquals(postgres.GetService<IMigrationsAssembly>().Assembly, typeof(AppDbContext).Assembly).Should().BeTrue();
+        ReferenceEquals(mySql.GetService<IMigrationsAssembly>().Assembly, typeof(MySqlAppDbContext).Assembly).Should().BeTrue();
+        var postgresScript = postgres.Database.GenerateCreateScript();
+        var mySqlScript = mySql.Database.GenerateCreateScript();
+
+        postgresScript.Should().Contain("CREATE TABLE");
+        postgresScript.Should().Contain("openiddict_applications");
+        mySqlScript.Should().Contain("CREATE TABLE");
+        mySqlScript.Should().Contain("openiddict_applications");
+        postgresScript.Should().NotBe(mySqlScript);
+    }
+
+    [Fact]
     public void DesignTimeFactories_AreExactForEachContext()
     {
         var factoryInterface = typeof(Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory<>);
@@ -403,9 +446,11 @@ public class DatabaseProviderTests
     [Fact]
     public async Task MySqlInitialization_PreparesCacheBeforeProbe()
     {
-        var connection = new StubMySqlStartupConnection();
+        var events = new List<string>();
+        var connection = new StubMySqlStartupConnection(events);
         var cache = new Mock<IDistributedCache>();
         cache.Setup(item => item.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback(() => events.Add("probe"))
             .ReturnsAsync((byte[]?)null);
 
         await DatabaseStartup.InitializeMySqlAsync(
@@ -413,10 +458,107 @@ public class DatabaseProviderTests
             cache.Object,
             connection);
 
-        connection.Calls.Should().Equal("open", "version", "ensure-cache-table");
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Once);
+        events.Should().Equal("open", "version", "ensure-cache-table", "probe");
+    }
+
+    [Fact]
+    public async Task MySqlStartupConnection_ForwardsSqlOperationsAndUsesExpectedCommands()
+    {
+        var connection = new RecordingDbConnection(
+            new RecordingCommandPlan { ScalarResult = "8.0.36" },
+            new RecordingCommandPlan(),
+            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
+            new RecordingCommandPlan { Rows = CreateValidCacheIndexRows() });
+        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
+
+        var version = await startupConnection.ReadServerVersionAsync(CancellationToken.None);
+        await startupConnection.EnsureCacheTableAsync(CreateMySqlCacheSettings(), CancellationToken.None);
+
+        version.Should().Be("8.0.36");
+        connection.Commands.Should().HaveCount(4);
+        connection.Commands[0].CommandText.Should().Be("SELECT VERSION();");
+        connection.Commands[1].CommandText.Should().Contain("CREATE TABLE IF NOT EXISTS `openid`.`openiddict_cache_entries`");
+        connection.Commands[1].CommandText.Should().Contain("`Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL");
+        connection.Commands[1].CommandText.Should().Contain("PRIMARY KEY (`Id`)");
+        connection.Commands[1].CommandText.Should().Contain("KEY `ix_expires_at_time` (`ExpiresAtTime`)");
+        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
+        connection.Commands[2].Parameters.Cast<DbParameter>().Should().Contain(parameter =>
+            parameter.ParameterName == "@schema" && Equals(parameter.Value, "openid"));
+        connection.Commands[2].Parameters.Cast<DbParameter>().Should().Contain(parameter =>
+            parameter.ParameterName == "@table" && Equals(parameter.Value, "openiddict_cache_entries"));
+        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
+    }
+
+    [Fact]
+    public void MySqlStartupConnection_RejectsNullConnection()
+    {
+        var action = () => new DatabaseStartup.MySqlStartupConnection((DbConnection)null!);
+
+        action.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("connection");
+    }
+
+    [Fact]
+    public async Task ReadServerVersion_PropagatesCommandFailure()
+    {
+        var expected = new InvalidOperationException("version query failed");
+        var connection = new RecordingDbConnection(new RecordingCommandPlan { Exception = expected });
+
+        Func<Task> action = async () => await DatabaseStartup.ReadServerVersionAsync(connection, CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
+        exception.Which.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task ReadServerVersion_ConvertsNullScalarToEmptyString()
+    {
+        var connection = new RecordingDbConnection(new RecordingCommandPlan { ScalarResult = null });
+
+        var version = await DatabaseStartup.ReadServerVersionAsync(connection, CancellationToken.None);
+
+        version.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EnsureCacheTable_PropagatesCreateFailure()
+    {
+        var expected = new InvalidOperationException("cache table create failed");
+        var connection = new RecordingDbConnection(new RecordingCommandPlan { Exception = expected });
+
+        var action = () => DatabaseStartup.EnsureCacheTableAsync(
+            connection,
+            CreateMySqlCacheSettings(),
+            CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
+        exception.Which.Should().BeSameAs(expected);
+        connection.Commands.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task EnsureCacheTable_StopsAtColumnQueryFailure()
+    {
+        var expected = new InvalidOperationException("column query failed");
+        var connection = new RecordingDbConnection(
+            new RecordingCommandPlan(),
+            new RecordingCommandPlan { Exception = expected });
+
+        var action = () => DatabaseStartup.EnsureCacheTableAsync(
+            connection,
+            CreateMySqlCacheSettings(),
+            CancellationToken.None);
+
+        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
+        exception.Which.Should().BeSameAs(expected);
+        connection.Commands.Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData("cache", "`cache`")]
+    [InlineData("cache`name", "`cache``name`")]
+    public void QuoteIdentifier_EscapesMySqlIdentifier(string identifier, string expected)
+    {
+        DatabaseStartup.QuoteIdentifier(identifier).Should().Be(expected);
     }
 
     [Theory]
@@ -539,6 +681,38 @@ public class DatabaseProviderTests
     }
 
     [Theory]
+    [MemberData(nameof(IncompatibleCacheColumns))]
+    public void MySqlCacheSchemaValidation_RejectsEveryIncompatibleColumnShape(
+        string columnName,
+        object incompatibleColumn)
+    {
+        var columns = CreateValidCacheColumns();
+        columns[columnName] = (DatabaseStartup.CacheColumnDefinition)incompatibleColumn;
+
+        var action = () => DatabaseStartup.ValidateCacheColumns(columns);
+
+        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain(columnName);
+    }
+
+    public static IEnumerable<object[]> IncompatibleCacheColumns()
+    {
+        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("text", "NO", 449, null, "ascii_bin") };
+        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "YES", 449, null, "ascii_bin") };
+        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "NO", 448, null, "ascii_bin") };
+        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "NO", 449, null, "utf8mb4_bin") };
+        yield return new object[] { "Value", new DatabaseStartup.CacheColumnDefinition("blob", "NO", null, null, null) };
+        yield return new object[] { "Value", new DatabaseStartup.CacheColumnDefinition("longblob", "YES", null, null, null) };
+        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("timestamp", "NO", null, 6, null) };
+        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("datetime", "YES", null, 6, null) };
+        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("datetime", "NO", null, 3, null) };
+        yield return new object[] { "SlidingExpirationInSeconds", new DatabaseStartup.CacheColumnDefinition("int", "YES", null, null, null) };
+        yield return new object[] { "SlidingExpirationInSeconds", new DatabaseStartup.CacheColumnDefinition("bigint", "NO", null, null, null) };
+        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("timestamp", "YES", null, 6, null) };
+        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("datetime", "NO", null, 6, null) };
+        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("datetime", "YES", null, 3, null) };
+    }
+
+    [Theory]
     [InlineData("Id")]
     [InlineData("Value")]
     [InlineData("ExpiresAtTime")]
@@ -587,6 +761,38 @@ public class DatabaseProviderTests
         action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain("ExpiresAtTime");
     }
 
+    [Theory]
+    [InlineData("pk_cache", "Id", 1)]
+    [InlineData("PRIMARY", "Value", 1)]
+    [InlineData("PRIMARY", "Id", 2)]
+    public void MySqlCacheSchemaValidation_RejectsInvalidPrimaryKeyShape(
+        string name,
+        string column,
+        int sequence)
+    {
+        var indexes = CreateValidCacheIndexes();
+        indexes[0] = new(name, column, sequence);
+
+        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes, "openid.cache");
+
+        action.Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("openid.cache");
+    }
+
+    [Theory]
+    [InlineData("Id", 1)]
+    [InlineData("ExpiresAtTime", 2)]
+    public void MySqlCacheSchemaValidation_RejectsInvalidExpirationIndexShape(string column, int sequence)
+    {
+        var indexes = CreateValidCacheIndexes();
+        indexes[1] = new("ix_expires_at_time", column, sequence);
+
+        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes, "openid.cache");
+
+        action.Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("openid.cache");
+    }
+
     private static MySqlCacheSettings CreateMySqlCacheSettings(string? connectionString = null)
     {
         var configuration = new ConfigurationBuilder()
@@ -621,9 +827,34 @@ public class DatabaseProviderTests
         ];
     }
 
+    private static IReadOnlyList<object?[]> CreateValidCacheColumnRows() =>
+    [
+        ["Id", "varchar", "NO", 449L, null, "ascii_bin"],
+        ["Value", "longblob", "NO", null, null, null],
+        ["ExpiresAtTime", "datetime", "NO", null, 6, null],
+        ["SlidingExpirationInSeconds", "bigint", "YES", null, null, null],
+        ["AbsoluteExpiration", "datetime", "YES", null, 6, null]
+    ];
+
+    private static IReadOnlyList<object?[]> CreateValidCacheIndexRows() =>
+    [
+        ["PRIMARY", "Id", 1],
+        ["ix_expires_at_time", "ExpiresAtTime", 1]
+    ];
+
     private sealed class StubMySqlStartupConnection : IMySqlStartupConnection
     {
-        public List<string> Calls { get; } = [];
+        public StubMySqlStartupConnection()
+            : this([])
+        {
+        }
+
+        public StubMySqlStartupConnection(List<string> calls)
+        {
+            Calls = calls;
+        }
+
+        public List<string> Calls { get; }
 
         public string? ServerVersion { get; set; } = "8.0.36";
 
@@ -656,5 +887,246 @@ public class DatabaseProviderTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingCommandPlan
+    {
+        public object? ScalarResult { get; init; }
+
+        public IReadOnlyList<object?[]> Rows { get; init; } = [];
+
+        public Exception? Exception { get; init; }
+    }
+
+    private sealed class RecordingDbConnection : DbConnection
+    {
+        private readonly Queue<RecordingCommandPlan> _plans;
+        private ConnectionState _state = ConnectionState.Closed;
+
+        public RecordingDbConnection(params RecordingCommandPlan[] plans)
+        {
+            _plans = new Queue<RecordingCommandPlan>(plans);
+        }
+
+        public List<RecordingDbCommand> Commands { get; } = [];
+
+        [AllowNull]
+        public override string ConnectionString { get; set; } = string.Empty;
+
+        public override string Database => "openid";
+
+        public override string DataSource => "recording";
+
+        public override string ServerVersion => "8.0.36";
+
+        public override ConnectionState State => _state;
+
+        public override void ChangeDatabase(string databaseName)
+        {
+        }
+
+        public override void Close()
+        {
+            _state = ConnectionState.Closed;
+        }
+
+        public override void Open()
+        {
+            _state = ConnectionState.Open;
+        }
+
+        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) =>
+            throw new NotSupportedException();
+
+        protected override DbCommand CreateDbCommand()
+        {
+            if (!_plans.TryDequeue(out var plan))
+            {
+                throw new InvalidOperationException("No command plan was configured.");
+            }
+
+            var command = new RecordingDbCommand(plan)
+            {
+                Connection = this
+            };
+            Commands.Add(command);
+            return command;
+        }
+    }
+
+    private sealed class RecordingDbCommand : DbCommand
+    {
+        private readonly RecordingCommandPlan _plan;
+        private readonly RecordingDbParameterCollection _parameters = new();
+
+        public RecordingDbCommand(RecordingCommandPlan plan)
+        {
+            _plan = plan;
+        }
+
+        [AllowNull]
+        public override string CommandText { get; set; } = string.Empty;
+
+        public override int CommandTimeout { get; set; }
+
+        public override CommandType CommandType { get; set; } = CommandType.Text;
+
+        public override bool DesignTimeVisible { get; set; }
+
+        public override UpdateRowSource UpdatedRowSource { get; set; }
+
+        protected override DbConnection? DbConnection { get; set; }
+
+        protected override DbParameterCollection DbParameterCollection => _parameters;
+
+        protected override DbTransaction? DbTransaction { get; set; }
+
+        public override void Cancel()
+        {
+        }
+
+        public override int ExecuteNonQuery()
+        {
+            ThrowIfConfigured();
+            return 0;
+        }
+
+        public override object? ExecuteScalar()
+        {
+            ThrowIfConfigured();
+            return _plan.ScalarResult;
+        }
+
+        public override void Prepare()
+        {
+        }
+
+        protected override DbParameter CreateDbParameter() => new RecordingDbParameter();
+
+        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        {
+            ThrowIfConfigured();
+
+            var table = new DataTable();
+            var columnCount = _plan.Rows.Count == 0 ? 0 : _plan.Rows.Max(row => row.Length);
+            for (var index = 0; index < columnCount; index++)
+            {
+                table.Columns.Add($"Column{index}", typeof(object));
+            }
+
+            foreach (var row in _plan.Rows)
+            {
+                var values = Enumerable.Repeat<object?>(null, columnCount)
+                    .Select((value, index) => index < row.Length ? row[index] ?? DBNull.Value : DBNull.Value)
+                    .ToArray();
+                table.Rows.Add(values);
+            }
+
+            return table.CreateDataReader();
+        }
+
+        private void ThrowIfConfigured()
+        {
+            if (_plan.Exception is not null)
+            {
+                throw _plan.Exception;
+            }
+        }
+    }
+
+    private sealed class RecordingDbParameterCollection : DbParameterCollection
+    {
+        private readonly List<DbParameter> _items = [];
+
+        public override int Count => _items.Count;
+
+        protected override DbParameter GetParameter(int index) => _items[index];
+
+        protected override DbParameter GetParameter(string parameterName) =>
+            _items.First(parameter => parameter.ParameterName == parameterName);
+
+        public override int Add(object value)
+        {
+            var parameter = value as DbParameter ?? throw new ArgumentException("Expected a database parameter.", nameof(value));
+            _items.Add(parameter);
+            return _items.Count - 1;
+        }
+
+        public override void AddRange(Array values)
+        {
+            foreach (var value in values)
+            {
+                Add(value!);
+            }
+        }
+
+        public override void Clear() => _items.Clear();
+
+        public override bool Contains(object? value) => value is DbParameter parameter && _items.Contains(parameter);
+
+        public override bool Contains(string? value) => _items.Any(parameter => parameter.ParameterName == value);
+
+        public override void CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
+
+        public override IEnumerator GetEnumerator() => _items.GetEnumerator();
+
+        public override int IndexOf(object? value) => value is DbParameter parameter ? _items.IndexOf(parameter) : -1;
+
+        public override int IndexOf(string? parameterName) =>
+            _items.FindIndex(parameter => parameter.ParameterName == parameterName);
+
+        public override void Insert(int index, object value)
+        {
+            var parameter = value as DbParameter ?? throw new ArgumentException("Expected a database parameter.", nameof(value));
+            _items.Insert(index, parameter);
+        }
+
+        public override void Remove(object? value)
+        {
+            if (value is DbParameter parameter)
+            {
+                _items.Remove(parameter);
+            }
+        }
+
+        public override void RemoveAt(int index) => _items.RemoveAt(index);
+
+        public override void RemoveAt(string? parameterName) => RemoveAt(IndexOf(parameterName));
+
+        protected override void SetParameter(int index, DbParameter value) => _items[index] = value;
+
+        protected override void SetParameter(string? parameterName, DbParameter value) =>
+            _items[IndexOf(parameterName)] = value;
+
+        public override object SyncRoot => this;
+    }
+
+    private sealed class RecordingDbParameter : DbParameter
+    {
+        public override DbType DbType { get; set; }
+
+        public override ParameterDirection Direction { get; set; } = ParameterDirection.Input;
+
+        public override bool IsNullable { get; set; }
+
+        [AllowNull]
+        public override string ParameterName { get; set; } = string.Empty;
+
+        public override byte Precision { get; set; }
+
+        public override byte Scale { get; set; }
+
+        public override int Size { get; set; }
+
+        [AllowNull]
+        public override string SourceColumn { get; set; } = string.Empty;
+
+        public override bool SourceColumnNullMapping { get; set; }
+
+        public override object? Value { get; set; }
+
+        public override void ResetDbType()
+        {
+        }
     }
 }
