@@ -19,8 +19,26 @@ public class CaptchaController(
 
     private const int W = 120, H = 38;
 
-    // ---- 图形验证码 ----
+    // 全局静态缓存字体，不要每次生成验证码都Load（性能+内存泄漏）
+    private static readonly SKTypeface? CaptchaTypeface;
 
+    static CaptchaController()
+    {
+        CaptchaTypeface = SKTypeface.Default;
+        if (CaptchaTypeface != null)
+        {
+            return;
+        }
+
+        // 优先读取容器内的TimesNewRoman.ttf；本地开发 fallback Default
+        var fontPath = Path.Combine(AppContext.BaseDirectory, "/usr/share/fonts/truetype/deng/TimesNewRoman.ttf");
+        if (System.IO.File.Exists(fontPath))
+        {
+            CaptchaTypeface = SKTypeface.FromFile(fontPath);
+        }
+    }
+
+    // ---- 图形验证码 ----
     [HttpGet("image")]
     public IActionResult Image()
     {
@@ -50,7 +68,7 @@ public class CaptchaController(
             canvas.DrawLine(rng.Next(W), rng.Next(H), rng.Next(W), rng.Next(H), p);
         }
 
-        using var font = new SKFont(SKTypeface.Default, 20);
+        using var font = new SKFont(CaptchaTypeface, 20);
         for (var i = 0; i < code.Length; i++)
         {
             using var p = new SKPaint();
