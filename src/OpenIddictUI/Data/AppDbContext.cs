@@ -7,10 +7,24 @@ using OpenIddictUI.Options;
 
 namespace OpenIddictUI.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<IdentityExtensionOptions> identityOptions)
-    : IdentityDbContext<User>(options)
+public class AppDbContext : IdentityDbContext<User>
 {
-    private readonly IdentityExtensionOptions _identityOptions = identityOptions.Value;
+    private readonly IdentityExtensionOptions _identityOptions;
+
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        IOptions<IdentityExtensionOptions> identityOptions)
+        : this((DbContextOptions)options, identityOptions)
+    {
+    }
+
+    protected AppDbContext(
+        DbContextOptions options,
+        IOptions<IdentityExtensionOptions> identityOptions)
+        : base(options)
+    {
+        _identityOptions = identityOptions.Value;
+    }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -22,11 +36,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Ident
         // Identity 表由外部用户管理系统维护，不纳入 EF Migration
         ConfigureIdentityTables(builder);
 
+        AdjustModelCreating(builder);
+
         // 软删除：通过全局查询过滤器自动过滤 IsDeleted=true 的记录
         ConfigureSoftDelete(builder);
 
         // 所有表名、列名、索引名、外键名统一转为 lowercase_snake_case
         ApplySnakeCaseNaming(builder);
+    }
+
+    protected virtual void AdjustModelCreating(ModelBuilder builder)
+    {
     }
 
     // 映射 Identity 表到可配置的表名，并排除出 Migration
@@ -56,7 +76,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Ident
         builder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
     }
 
-    private static void ApplySnakeCaseNaming(ModelBuilder builder)
+    private void ApplySnakeCaseNaming(ModelBuilder builder)
     {
         foreach (var entity in builder.Model.GetEntityTypes())
         {
@@ -86,12 +106,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IOptions<Ident
         }
     }
 
-    private static string ToSnake(string input)
+    private string ToSnake(string input)
     {
         if (string.IsNullOrEmpty(input))
         {
             return input;
         }
+
         var result = string.Concat(input.Select((c, i) =>
             i > 0 && char.IsUpper(c) && !char.IsUpper(input[i - 1])
                 ? "_" + char.ToLowerInvariant(c)
