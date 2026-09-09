@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-
 namespace OpenIddictUI.Data;
 
 public enum DatabaseProvider

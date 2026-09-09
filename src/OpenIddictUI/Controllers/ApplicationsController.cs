@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddictUI.Grants;
 
@@ -91,14 +92,17 @@ public class ApplicationsController(
         if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
 
-        if (input.ClientType == "confidential" && string.IsNullOrEmpty(input.ClientSecret) && string.IsNullOrEmpty(input.JsonWebKeySet))
+        if (input.ClientType == "confidential" && string.IsNullOrEmpty(input.ClientSecret) &&
+            string.IsNullOrEmpty(input.JsonWebKeySet))
             return err(Errors.InvalidRequest.Code, "confidential 客户端必须设置 ClientSecret 或 JWKS");
 
-        if (input.GrantTypes?.Contains("authorization_code") == true && (input.RedirectUris == null || input.RedirectUris.Count == 0))
+        if (input.GrantTypes?.Contains("authorization_code") == true &&
+            (input.RedirectUris == null || input.RedirectUris.Count == 0))
             return err(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
 
         if (input.AccessTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "AccessTokenLifetime 必须大于 0");
-        if (input.AuthorizationCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "AuthorizationCodeLifetime 必须大于 0");
+        if (input.AuthorizationCodeLifetime is <= 0)
+            return err(Errors.InvalidRequest.Code, "AuthorizationCodeLifetime 必须大于 0");
         if (input.RefreshTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "RefreshTokenLifetime 必须大于 0");
         if (input.IdentityTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "IdentityTokenLifetime 必须大于 0");
         if (input.DeviceCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "DeviceCodeLifetime 必须大于 0");
@@ -110,7 +114,7 @@ public class ApplicationsController(
     private static OpenIddictApplicationDescriptor BuildDescriptor(ApplicationInput input)
     {
         var isPublic = string.Equals(input.ClientType, "public", StringComparison.OrdinalIgnoreCase);
-        var d = new OpenIddictApplicationDescriptor
+        var descriptor = new OpenIddictApplicationDescriptor
         {
             ClientId = input.ClientId,
             ClientSecret = isPublic ? null : input.ClientSecret,
@@ -119,50 +123,59 @@ public class ApplicationsController(
             DisplayName = input.DisplayName,
             ApplicationType = input.ApplicationType ?? "web"
         };
+        if (!string.IsNullOrWhiteSpace(input.JsonWebKeySet))
+        {
+            descriptor.JsonWebKeySet = new JsonWebKeySet(input.JsonWebKeySet);
+        }
 
-        if (!string.IsNullOrEmpty(input.ClientUrl)) d.Settings["client_url"] = input.ClientUrl;
-        if (!string.IsNullOrEmpty(input.ClientLogoUrl)) d.Settings["client_logo_url"] = input.ClientLogoUrl;
-        if (!string.IsNullOrEmpty(input.JsonWebKeySet)) d.Settings["jwks_json"] = input.JsonWebKeySet;
-        d.Settings["enabled"] = input.Enabled ? "true" : "false";
+        if (!string.IsNullOrEmpty(input.ClientUrl)) descriptor.Settings["client_url"] = input.ClientUrl;
+        if (!string.IsNullOrEmpty(input.ClientLogoUrl)) descriptor.Settings["client_logo_url"] = input.ClientLogoUrl;
+        descriptor.Settings["enabled"] = input.Enabled ? "true" : "false";
 
-        foreach (var u in input.RedirectUris ?? []) d.RedirectUris.Add(new Uri(u));
-        foreach (var u in input.PostLogoutRedirectUris ?? []) d.PostLogoutRedirectUris.Add(new Uri(u));
+        foreach (var u in input.RedirectUris ?? []) descriptor.RedirectUris.Add(new Uri(u));
+        foreach (var u in input.PostLogoutRedirectUris ?? []) descriptor.PostLogoutRedirectUris.Add(new Uri(u));
 
         // grant types → permissions
         foreach (var gt in input.GrantTypes ?? [])
-            d.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.GrantType + gt);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.GrantType + gt);
 
         // authorization_code → need response_type=code
-        if ((input.GrantTypes?.Contains("authorization_code") ?? false))
-            d.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+        if (input.GrantTypes?.Contains("authorization_code") ?? false)
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
 
         // scopes
         foreach (var sc in input.Scopes ?? [])
-            d.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + sc);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + sc);
 
         // 有 redirect_uri → add endpoint permissions
         if (input.RedirectUris is { Count: > 0 })
         {
-            d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
-            d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
         }
 
         if (input.PostLogoutRedirectUris is { Count: > 0 })
-            d.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
 
         // public 客户端强制 PKCE
         if (isPublic || input.RequirePkce)
-            d.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
+            descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
 
         // Token lifetimes (seconds → TimeSpan)
-        if (input.AccessTokenLifetime.HasValue) d.SetAccessTokenLifetime(TimeSpan.FromSeconds(input.AccessTokenLifetime.Value));
-        if (input.AuthorizationCodeLifetime.HasValue) d.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(input.AuthorizationCodeLifetime.Value));
-        if (input.RefreshTokenLifetime.HasValue) d.SetRefreshTokenLifetime(TimeSpan.FromSeconds(input.RefreshTokenLifetime.Value));
-        if (input.IdentityTokenLifetime.HasValue) d.SetIdentityTokenLifetime(TimeSpan.FromSeconds(input.IdentityTokenLifetime.Value));
-        if (input.DeviceCodeLifetime.HasValue) d.SetDeviceCodeLifetime(TimeSpan.FromSeconds(input.DeviceCodeLifetime.Value));
-        if (input.UserCodeLifetime.HasValue) d.SetUserCodeLifetime(TimeSpan.FromSeconds(input.UserCodeLifetime.Value));
+        if (input.AccessTokenLifetime.HasValue)
+            descriptor.SetAccessTokenLifetime(TimeSpan.FromSeconds(input.AccessTokenLifetime.Value));
+        if (input.AuthorizationCodeLifetime.HasValue)
+            descriptor.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(input.AuthorizationCodeLifetime.Value));
+        if (input.RefreshTokenLifetime.HasValue)
+            descriptor.SetRefreshTokenLifetime(TimeSpan.FromSeconds(input.RefreshTokenLifetime.Value));
+        if (input.IdentityTokenLifetime.HasValue)
+            descriptor.SetIdentityTokenLifetime(TimeSpan.FromSeconds(input.IdentityTokenLifetime.Value));
+        if (input.DeviceCodeLifetime.HasValue)
+            descriptor.SetDeviceCodeLifetime(TimeSpan.FromSeconds(input.DeviceCodeLifetime.Value));
+        if (input.UserCodeLifetime.HasValue)
+            descriptor.SetUserCodeLifetime(TimeSpan.FromSeconds(input.UserCodeLifetime.Value));
 
-        return d;
+        return descriptor;
     }
 
     private bool IsAdmin() => User.Identity?.Name == "admin";

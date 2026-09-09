@@ -17,7 +17,7 @@ namespace OpenIddictUI.Migrations.MySql
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
@@ -208,7 +208,8 @@ namespace OpenIddictUI.Migrations.MySql
                 {
                     b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("id");
 
                     b.Property<string>("ApplicationType")
@@ -222,7 +223,8 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("client_id");
 
                     b.Property<string>("ClientSecret")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("client_secret");
 
                     b.Property<string>("ClientType")
@@ -242,39 +244,43 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("consent_type");
 
                     b.Property<string>("DisplayName")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
                         .HasColumnName("display_name");
 
                     b.Property<string>("DisplayNames")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("display_names");
 
                     b.Property<string>("JsonWebKeySet")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("json_web_key_set");
 
                     b.Property<string>("Permissions")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("permissions");
 
                     b.Property<string>("PostLogoutRedirectUris")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("post_logout_redirect_uris");
 
                     b.Property<string>("Properties")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("properties");
 
                     b.Property<string>("RedirectUris")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("redirect_uris");
 
                     b.Property<string>("Requirements")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("requirements");
 
                     b.Property<string>("Settings")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("settings");
 
                     b.HasKey("Id")
@@ -291,11 +297,13 @@ namespace OpenIddictUI.Migrations.MySql
                 {
                     b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("id");
 
                     b.Property<string>("ApplicationId")
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("application_id");
 
                     b.Property<string>("ConcurrencyToken")
@@ -309,11 +317,12 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("creation_date");
 
                     b.Property<string>("Properties")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("properties");
 
                     b.Property<string>("Scopes")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("scopes");
 
                     b.Property<string>("Status")
@@ -322,8 +331,8 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("status");
 
                     b.Property<string>("Subject")
-                        .HasMaxLength(400)
-                        .HasColumnType("varchar(400)")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
                         .HasColumnName("subject");
 
                     b.Property<string>("Type")
@@ -344,7 +353,8 @@ namespace OpenIddictUI.Migrations.MySql
                 {
                     b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("id");
 
                     b.Property<string>("ConcurrencyToken")
@@ -354,32 +364,35 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("concurrency_token");
 
                     b.Property<string>("Description")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
                         .HasColumnName("description");
 
                     b.Property<string>("Descriptions")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("descriptions");
 
                     b.Property<string>("DisplayName")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
                         .HasColumnName("display_name");
 
                     b.Property<string>("DisplayNames")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("display_names");
 
                     b.Property<string>("Name")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
                         .HasColumnName("name");
 
                     b.Property<string>("Properties")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("properties");
 
                     b.Property<string>("Resources")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("resources");
 
                     b.HasKey("Id")
@@ -396,15 +409,18 @@ namespace OpenIddictUI.Migrations.MySql
                 {
                     b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("id");
 
                     b.Property<string>("ApplicationId")
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("application_id");
 
                     b.Property<string>("AuthorizationId")
-                        .HasColumnType("varchar(255)")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
                         .HasColumnName("authorization_id");
 
                     b.Property<string>("ConcurrencyToken")
@@ -422,11 +438,12 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("expiration_date");
 
                     b.Property<string>("Payload")
-                        .HasColumnType("longtext")
+                        .HasColumnType("text")
                         .HasColumnName("payload");
 
                     b.Property<string>("Properties")
-                        .HasColumnType("longtext")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
                         .HasColumnName("properties");
 
                     b.Property<DateTime?>("RedemptionDate")
@@ -444,8 +461,8 @@ namespace OpenIddictUI.Migrations.MySql
                         .HasColumnName("status");
 
                     b.Property<string>("Subject")
-                        .HasMaxLength(400)
-                        .HasColumnType("varchar(400)")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
                         .HasColumnName("subject");
 
                     b.Property<string>("Type")

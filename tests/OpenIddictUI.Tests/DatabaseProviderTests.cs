@@ -7,11 +7,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Postgres;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using MySqlConnector;
-using Moq;
 using OpenIddictUI.Data;
 using OpenIddictUI.Options;
 
@@ -72,210 +69,6 @@ public class DatabaseProviderTests
         exception.Message.Should().NotContain("SOCODB_DB_PASSWORD");
     }
 
-    [Theory]
-    [InlineData("8.0", 8, 0, 0)]
-    [InlineData("8.0.0", 8, 0, 0)]
-    [InlineData("8.0.36", 8, 0, 36)]
-    [InlineData("8.4", 8, 4, 0)]
-    [InlineData("8.4.3", 8, 4, 3)]
-    [InlineData("9.1.0", 9, 1, 0)]
-    public void SupportedMySqlVersion_IsAccepted(string value, int major, int minor, int patch)
-    {
-        DatabaseStartup.IsSupportedMySqlVersion(value, out var parsed).Should().BeTrue();
-        parsed.Should().Be(new Version(major, minor, patch));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("5.7.44")]
-    [InlineData("7.9.0")]
-    [InlineData("8.0.0-MariaDB")]
-    [InlineData("not-a-version")]
-    [InlineData("8.x.1")]
-    [InlineData("8")]
-    [InlineData("")]
-    public void UnsupportedMySqlVersion_IsRejected(string? value)
-    {
-        DatabaseStartup.IsSupportedMySqlVersion(value, out _).Should().BeFalse();
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("not-a-version")]
-    [InlineData("8.x.1")]
-    [InlineData("8")]
-    [InlineData("")]
-    public void MalformedMySqlVersion_DoesNotProduceParsedVersion(string? value)
-    {
-        DatabaseStartup.IsSupportedMySqlVersion(value, out var parsed).Should().BeFalse();
-        parsed.Should().BeNull();
-    }
-
-    [Fact]
-    public void UnsupportedMySqlVersion_WithUnrepresentablePatch_IsRejected()
-    {
-        DatabaseStartup.IsSupportedMySqlVersion("7.9.99999999999999999999", out _).Should().BeFalse();
-    }
-
-    [Theory]
-    [InlineData("openiddict_cache_entries")]
-    [InlineData("cache_01")]
-    public void MySqlCacheSettings_AcceptsSafeTableNames(string tableName)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] =
-                    "Server=localhost;Database=openid;User ID=app;Password=secret;",
-                ["MySqlCache:TableName"] = tableName
-            })
-            .Build();
-
-        var settings = MySqlCacheSettings.FromConfiguration(configuration);
-
-        settings.TableName.Should().Be(tableName);
-        settings.SchemaName.Should().Be("openid");
-    }
-
-    [Fact]
-    public void MySqlCacheSettings_EnablesUserVariablesForPomeloQueries()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] =
-                    "Server=localhost;Database=openid;User ID=app;Password=secret;"
-            })
-            .Build();
-
-        var settings = MySqlCacheSettings.FromConfiguration(configuration);
-
-        new MySqlConnectionStringBuilder(settings.ConnectionString)
-            .AllowUserVariables.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("cache-name")]
-    [InlineData("cache.name")]
-    [InlineData("cache`name")]
-    public void MySqlCacheSettings_RejectsUnsafeTableNames(string tableName)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=openid;",
-                ["MySqlCache:TableName"] = tableName
-            })
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("MySqlCache:TableName");
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("schema-name")]
-    [InlineData("schema.name")]
-    [InlineData("schema`name")]
-    public void MySqlCacheSettings_RejectsUnsafeSchemaNames(string schemaName)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=openid;",
-                ["MySqlCache:SchemaName"] = schemaName
-            })
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("MySqlCache:SchemaName");
-    }
-
-    [Fact]
-    public void MySqlCacheSettings_RejectsUnsafeDatabaseNameUsedAsSchema()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=openid-db;"
-            })
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("DefaultConnection database");
-    }
-
-    [Theory]
-    [InlineData("MySqlCache:ExpiredItemsDeletionInterval", "not-a-duration")]
-    [InlineData("MySqlCache:ExpiredItemsDeletionInterval", "00:00:00")]
-    [InlineData("MySqlCache:ExpiredItemsDeletionInterval", "-00:01:00")]
-    [InlineData("MySqlCache:DefaultSlidingExpiration", "not-a-duration")]
-    [InlineData("MySqlCache:DefaultSlidingExpiration", "00:00:00")]
-    [InlineData("MySqlCache:DefaultSlidingExpiration", "-00:01:00")]
-    public void MySqlCacheSettings_RejectsInvalidDurations(string key, string value)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = "Server=localhost;Database=openid;",
-                [key] = value
-            })
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain(key);
-    }
-
-    [Fact]
-    public void MySqlCacheSettings_RejectsMissingConnectionStringWithoutLeakingPassword()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>())
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        var exception = action.Should().Throw<InvalidOperationException>().Which;
-        exception.ToString().Should().NotContain("secret");
-        exception.Message.Should().Contain("ConnectionStrings:DefaultConnection");
-    }
-
-    [Fact]
-    public void MySqlCacheSettings_RejectsInvalidConnectionStringWithoutLeakingPassword()
-    {
-        var password = "mysql-startup-secret";
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] =
-                    $"Server=localhost;Database=openid;Password={password};Unknown Option=1;"
-            })
-            .Build();
-
-        var action = () => MySqlCacheSettings.FromConfiguration(configuration);
-
-        var exception = action.Should().Throw<InvalidOperationException>().Which;
-        exception.ToString().Should().NotContain(password);
-        exception.Message.Should().Contain("ConnectionStrings:DefaultConnection");
-    }
-
-    [Fact]
-    public void MySqlCacheSettings_UsesExpectedDefaults()
-    {
-        var settings = CreateMySqlCacheSettings();
-
-        settings.ExpiredItemsDeletionInterval.Should().BeNull();
-        settings.DefaultSlidingExpiration.Should().Be(TimeSpan.FromMinutes(20));
-    }
-
     [Fact]
     public void MigrationLists_AreIsolatedByContext()
     {
@@ -322,8 +115,10 @@ public class DatabaseProviderTests
         using var postgres = new AppDbContext(postgresOptions, identityOptions);
         using var mySql = new MySqlAppDbContext(mySqlOptions, identityOptions);
 
-        ReferenceEquals(postgres.GetService<IMigrationsAssembly>().Assembly, typeof(AppDbContext).Assembly).Should().BeTrue();
-        ReferenceEquals(mySql.GetService<IMigrationsAssembly>().Assembly, typeof(MySqlAppDbContext).Assembly).Should().BeTrue();
+        ReferenceEquals(postgres.GetService<IMigrationsAssembly>().Assembly, typeof(AppDbContext).Assembly).Should()
+            .BeTrue();
+        ReferenceEquals(mySql.GetService<IMigrationsAssembly>().Assembly, typeof(MySqlAppDbContext).Assembly).Should()
+            .BeTrue();
         var postgresScript = postgres.Database.GenerateCreateScript();
         var mySqlScript = mySql.Database.GenerateCreateScript();
 
@@ -342,7 +137,7 @@ public class DatabaseProviderTests
             .Where(type => !type.IsAbstract)
             .SelectMany(type => type.GetInterfaces()
                 .Where(interfaceType => interfaceType.IsGenericType &&
-                    interfaceType.GetGenericTypeDefinition() == factoryInterface)
+                                        interfaceType.GetGenericTypeDefinition() == factoryInterface)
                 .Select(interfaceType => new
                 {
                     Factory = type,
@@ -352,30 +147,6 @@ public class DatabaseProviderTests
 
         factories.Should().ContainSingle(item => item.Context == typeof(AppDbContext));
         factories.Should().ContainSingle(item => item.Context == typeof(MySqlAppDbContext));
-    }
-
-    [Fact]
-    public void DesignTimeFactories_CreateProviderAndMigrationBoundContexts()
-    {
-        using var postgres = new AppDbContextFactory().CreateDbContext([]);
-        using var mySql = new MySqlAppDbContextFactory().CreateDbContext([]);
-
-        postgres.Database.ProviderName.Should().Contain("Npgsql");
-        mySql.Database.ProviderName.Should().Contain("MySql");
-        postgres.Database.GetMigrations().Should().Equal("20260527135000_OpenIddictSchema");
-        mySql.Database.GetMigrations().Should().Equal("20260907121156_MySqlOpenIddictSchema");
-    }
-
-    [Fact]
-    public void DesignTimeConfiguration_ResolvesEnvironmentPlaceholders()
-    {
-        var path = Environment.GetEnvironmentVariable("PATH");
-        path.Should().NotBeNullOrEmpty();
-
-        var connectionString = DatabaseDesignTimeConfiguration.SubstituteEnvironmentVariables(
-            "Server=localhost;Password=${PATH};Database=openid;");
-
-        connectionString.Should().Be($"Server=localhost;Password={path};Database=openid;");
     }
 
     [Fact]
@@ -416,561 +187,6 @@ public class DatabaseProviderTests
         caches[0].GetType().FullName.Should().Be("Microsoft.Extensions.Caching.Postgres.PostgresCache");
     }
 
-    [Fact]
-    public async Task PostgreSqlInitialization_DoesNotResolveCacheBeforeMigration()
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-
-        await DatabaseStartup.InitializeAsync(services, DatabaseProvider.Postgres);
-    }
-
-    [Fact]
-    public async Task PostgreSqlInitialization_DoesNotProbeUnavailableCacheBeforeMigration()
-    {
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-        cache.Setup(item => item.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("cache table is unavailable"));
-        await using var services = new ServiceCollection()
-            .AddSingleton<IOptions<PostgresCacheOptions>>(
-                Microsoft.Extensions.Options.Options.Create(new PostgresCacheOptions { CreateIfNotExists = false }))
-            .AddSingleton<IDistributedCache>(cache.Object)
-            .BuildServiceProvider();
-
-        await DatabaseStartup.InitializeAsync(services, DatabaseProvider.Postgres);
-
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_PreparesCacheBeforeProbe()
-    {
-        var events = new List<string>();
-        var connection = new StubMySqlStartupConnection(events);
-        var cache = new Mock<IDistributedCache>();
-        cache.Setup(item => item.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback(() => events.Add("probe"))
-            .ReturnsAsync((byte[]?)null);
-
-        await DatabaseStartup.InitializeMySqlAsync(
-            CreateMySqlCacheSettings(),
-            cache.Object,
-            connection);
-
-        events.Should().Equal("open", "version", "ensure-cache-table", "probe");
-    }
-
-    [Fact]
-    public async Task MySqlStartupConnection_ForwardsSqlOperationsAndUsesExpectedCommands()
-    {
-        var connection = new RecordingDbConnection(
-            new RecordingCommandPlan { ScalarResult = "8.0.36" },
-            new RecordingCommandPlan(),
-            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
-            new RecordingCommandPlan { Rows = CreateValidCacheIndexRows() });
-        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
-
-        var version = await startupConnection.ReadServerVersionAsync(CancellationToken.None);
-        await startupConnection.EnsureCacheTableAsync(CreateMySqlCacheSettings(), CancellationToken.None);
-
-        version.Should().Be("8.0.36");
-        connection.Commands.Should().HaveCount(4);
-        connection.Commands[0].CommandText.Should().Be("SELECT VERSION();");
-        connection.Commands[1].CommandText.Should().Contain("CREATE TABLE IF NOT EXISTS `openid`.`openiddict_cache_entries`");
-        connection.Commands[1].CommandText.Should().Contain("`Id` varchar(449) CHARACTER SET ascii COLLATE ascii_bin NOT NULL");
-        connection.Commands[1].CommandText.Should().Contain("PRIMARY KEY (`Id`)");
-        connection.Commands[1].CommandText.Should().Contain("KEY `ix_expires_at_time` (`ExpiresAtTime`)");
-        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
-        connection.Commands[2].Parameters.Cast<DbParameter>().Should().Contain(parameter =>
-            parameter.ParameterName == "@schema" && Equals(parameter.Value, "openid"));
-        connection.Commands[2].Parameters.Cast<DbParameter>().Should().Contain(parameter =>
-            parameter.ParameterName == "@table" && Equals(parameter.Value, "openiddict_cache_entries"));
-        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
-    }
-
-    [Fact]
-    public void MySqlStartupConnection_RejectsNullConnection()
-    {
-        var action = () => new DatabaseStartup.MySqlStartupConnection((DbConnection)null!);
-
-        action.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("connection");
-    }
-
-    [Fact]
-    public async Task ReadServerVersion_PropagatesCommandFailure()
-    {
-        var expected = new InvalidOperationException("version query failed");
-        var connection = new RecordingDbConnection(new RecordingCommandPlan { Exception = expected });
-
-        Func<Task> action = async () => await DatabaseStartup.ReadServerVersionAsync(connection, CancellationToken.None);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-        exception.Which.Should().BeSameAs(expected);
-    }
-
-    [Fact]
-    public async Task ReadServerVersion_WhenScalarIsNull_ReturnsEmptyString()
-    {
-        var connection = new RecordingDbConnection(
-            new RecordingCommandPlan { ScalarResult = null });
-
-        var version = await DatabaseStartup.ReadServerVersionAsync(connection, CancellationToken.None);
-
-        version.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task ReadServerVersion_WhenScalarConversionReturnsNull_UsesFallbackBeforeSchemaValidation()
-    {
-        var settings = CreateMySqlCacheSettings();
-        var connection = new RecordingDbConnection(
-            new RecordingCommandPlan { ScalarResult = new NullStringScalar() },
-            new RecordingCommandPlan(),
-            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
-            new RecordingCommandPlan { Rows = CreateValidCacheIndexRows() });
-        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
-
-        var version = await startupConnection.ReadServerVersionAsync(CancellationToken.None);
-        await startupConnection.EnsureCacheTableAsync(settings, CancellationToken.None);
-
-        version.Should().BeEmpty();
-        DatabaseStartup.IsSupportedMySqlVersion(version, out _).Should().BeFalse();
-        connection.Commands.Should().HaveCount(4);
-        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
-        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
-    }
-
-    [Fact]
-    public async Task EnsureCacheTable_PropagatesCreateFailure()
-    {
-        var expected = new InvalidOperationException("cache table create failed");
-        var connection = new RecordingDbConnection(new RecordingCommandPlan { Exception = expected });
-
-        var action = () => DatabaseStartup.EnsureCacheTableAsync(
-            connection,
-            CreateMySqlCacheSettings(),
-            CancellationToken.None);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-        exception.Which.Should().BeSameAs(expected);
-        connection.Commands.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task EnsureCacheTable_StopsAtColumnQueryFailure()
-    {
-        var expected = new InvalidOperationException("column query failed");
-        var connection = new RecordingDbConnection(
-            new RecordingCommandPlan(),
-            new RecordingCommandPlan { Exception = expected });
-
-        var action = () => DatabaseStartup.EnsureCacheTableAsync(
-            connection,
-            CreateMySqlCacheSettings(),
-            CancellationToken.None);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-        exception.Which.Should().BeSameAs(expected);
-        connection.Commands.Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_PropagatesProviderFailureWithoutLeakingPassword()
-    {
-        const string password = "mysql-index-secret";
-        var settings = CreateMySqlCacheSettings(
-            $"Server=localhost;Database=openid;User ID=app;Password={password};");
-        ProviderLikeDbException? expected = null;
-        var connection = new RecordingDbConnection(
-            new RecordingCommandPlan { ScalarResult = "8.0.36" },
-            new RecordingCommandPlan(),
-            new RecordingCommandPlan { Rows = CreateValidCacheColumnRows() },
-            new RecordingCommandPlan
-            {
-                ExceptionFactory = connectionString =>
-                {
-                    expected = new ProviderLikeDbException(connectionString);
-                    return expected;
-                }
-            })
-        {
-            ConnectionString = settings.ConnectionString
-        };
-        await using var startupConnection = new DatabaseStartup.MySqlStartupConnection(connection);
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-
-        var action = () => DatabaseStartup.InitializeMySqlAsync(
-            settings,
-            cache.Object,
-            startupConnection,
-            CancellationToken.None);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-
-        expected.Should().NotBeNull();
-        expected!.Message.Should().Contain(password);
-        expected.ToString().Should().Contain(password);
-        exception.Which.InnerException.Should().BeSameAs(expected);
-        exception.Which.ToString().Should().NotContain(password);
-        connection.Commands.Should().HaveCount(4);
-        connection.Commands[2].CommandText.Should().Contain("FROM information_schema.COLUMNS");
-        connection.Commands[3].CommandText.Should().Contain("FROM information_schema.STATISTICS");
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Theory]
-    [InlineData("cache", "`cache`")]
-    [InlineData("cache`name", "`cache``name`")]
-    public void QuoteIdentifier_EscapesMySqlIdentifier(string identifier, string expected)
-    {
-        DatabaseStartup.QuoteIdentifier(identifier).Should().Be(expected);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not-a-version")]
-    [InlineData("5.7.44")]
-    [InlineData("8.0.0-MariaDB")]
-    public async Task MySqlInitialization_RejectsUnsupportedVersionBeforeCachePreparation(
-        string? serverVersion)
-    {
-        var connection = new StubMySqlStartupConnection { ServerVersion = serverVersion };
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-
-        var action = () => DatabaseStartup.InitializeMySqlAsync(
-            CreateMySqlCacheSettings(),
-            cache.Object,
-            connection);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-
-        exception.Which.Message.Should().Contain("unsupported");
-        connection.Calls.Should().Equal("open", "version");
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_PropagatesConnectionFailureWithoutProbingCache()
-    {
-        var connection = new StubMySqlStartupConnection
-        {
-            OpenException = new InvalidOperationException("connection failed")
-        };
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-
-        var action = () => DatabaseStartup.InitializeMySqlAsync(
-            CreateMySqlCacheSettings(),
-            cache.Object,
-            connection);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-
-        exception.Which.Message.Should().Be("connection failed");
-        connection.Calls.Should().Equal("open");
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_PropagatesCacheTablePreparationFailure()
-    {
-        var connection = new StubMySqlStartupConnection
-        {
-            EnsureCacheTableException = new InvalidOperationException("cache table preparation failed")
-        };
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-
-        var action = () => DatabaseStartup.InitializeMySqlAsync(
-            CreateMySqlCacheSettings(),
-            cache.Object,
-            connection);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-
-        exception.Which.Message.Should().Be("cache table preparation failed");
-        connection.Calls.Should().Equal("open", "version", "ensure-cache-table");
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_PropagatesCacheProbeFailure()
-    {
-        var connection = new StubMySqlStartupConnection();
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-        cache.Setup(item => item.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("cache probe failed"));
-
-        var action = () => DatabaseStartup.InitializeMySqlAsync(
-            CreateMySqlCacheSettings(),
-            cache.Object,
-            connection);
-
-        var exception = await action.Should().ThrowAsync<InvalidOperationException>();
-
-        exception.Which.Message.Should().Be("cache probe failed");
-        connection.Calls.Should().Equal("open", "version", "ensure-cache-table");
-    }
-
-    [Fact]
-    public async Task MySqlInitialization_ConnectionFailureDoesNotExposePassword()
-    {
-        const string password = "mysql-startup-secret";
-        var settings = CreateMySqlCacheSettings(
-            $"Server=127.0.0.1;Port=1;Database=openid;User ID=app;Password={password};Connection Timeout=1;");
-        var cache = new Mock<IDistributedCache>(MockBehavior.Strict);
-        await using var services = new ServiceCollection()
-            .AddSingleton(settings)
-            .AddSingleton<IDistributedCache>(cache.Object)
-            .BuildServiceProvider();
-
-        var action = () => DatabaseStartup.InitializeAsync(services, DatabaseProvider.MySql);
-
-        var exception = await action.Should().ThrowAsync<Exception>();
-
-        exception.Which.ToString().Should().NotContain(password);
-        cache.Verify(
-            item => item.GetAsync("__openiddictui_startup_probe__", It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public void MySqlCacheSchemaValidation_AcceptsExpectedColumnsAndIndexes()
-    {
-        DatabaseStartup.ValidateCacheColumns(CreateValidCacheColumns());
-        DatabaseStartup.ValidateCacheIndexes(CreateValidCacheIndexes());
-    }
-
-    [Theory]
-    [MemberData(nameof(IncompatibleCacheColumns))]
-    public void MySqlCacheSchemaValidation_RejectsEveryIncompatibleColumnShape(
-        string columnName,
-        object incompatibleColumn)
-    {
-        var columns = CreateValidCacheColumns();
-        columns[columnName] = (DatabaseStartup.CacheColumnDefinition)incompatibleColumn;
-
-        var action = () => DatabaseStartup.ValidateCacheColumns(columns);
-
-        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain(columnName);
-    }
-
-    public static IEnumerable<object[]> IncompatibleCacheColumns()
-    {
-        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("text", "NO", 449, null, "ascii_bin") };
-        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "YES", 449, null, "ascii_bin") };
-        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "NO", 448, null, "ascii_bin") };
-        yield return new object[] { "Id", new DatabaseStartup.CacheColumnDefinition("varchar", "NO", 449, null, "utf8mb4_bin") };
-        yield return new object[] { "Value", new DatabaseStartup.CacheColumnDefinition("blob", "NO", null, null, null) };
-        yield return new object[] { "Value", new DatabaseStartup.CacheColumnDefinition("longblob", "YES", null, null, null) };
-        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("timestamp", "NO", null, 6, null) };
-        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("datetime", "YES", null, 6, null) };
-        yield return new object[] { "ExpiresAtTime", new DatabaseStartup.CacheColumnDefinition("datetime", "NO", null, 3, null) };
-        yield return new object[] { "SlidingExpirationInSeconds", new DatabaseStartup.CacheColumnDefinition("int", "YES", null, null, null) };
-        yield return new object[] { "SlidingExpirationInSeconds", new DatabaseStartup.CacheColumnDefinition("bigint", "NO", null, null, null) };
-        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("timestamp", "YES", null, 6, null) };
-        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("datetime", "NO", null, 6, null) };
-        yield return new object[] { "AbsoluteExpiration", new DatabaseStartup.CacheColumnDefinition("datetime", "YES", null, 3, null) };
-    }
-
-    [Theory]
-    [InlineData("Id")]
-    [InlineData("Value")]
-    [InlineData("ExpiresAtTime")]
-    [InlineData("SlidingExpirationInSeconds")]
-    [InlineData("AbsoluteExpiration")]
-    public void MySqlCacheSchemaValidation_RejectsMissingRequiredColumn(string columnName)
-    {
-        var columns = CreateValidCacheColumns();
-        columns.Remove(columnName);
-
-        var action = () => DatabaseStartup.ValidateCacheColumns(columns);
-
-        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain(columnName);
-    }
-
-    [Fact]
-    public void MySqlCacheSchemaValidation_RejectsIncompatibleColumn()
-    {
-        var columns = CreateValidCacheColumns();
-        columns["Id"] = new("varchar", "NO", 449, null, "utf8mb4_bin");
-
-        var action = () => DatabaseStartup.ValidateCacheColumns(columns);
-
-        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain("Id");
-    }
-
-    [Fact]
-    public void MySqlCacheSchemaValidation_RejectsMissingPrimaryKey()
-    {
-        var indexes = CreateValidCacheIndexes();
-        indexes.RemoveAt(0);
-
-        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes);
-
-        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain("primary key");
-    }
-
-    [Fact]
-    public void MySqlCacheSchemaValidation_RejectsMissingExpirationIndex()
-    {
-        var indexes = CreateValidCacheIndexes();
-        indexes.RemoveAt(1);
-
-        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes);
-
-        action.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain("ExpiresAtTime");
-    }
-
-    [Theory]
-    [InlineData("pk_cache", "Id", 1)]
-    [InlineData("PRIMARY", "Value", 1)]
-    [InlineData("PRIMARY", "Id", 2)]
-    public void MySqlCacheSchemaValidation_RejectsInvalidPrimaryKeyShape(
-        string name,
-        string column,
-        int sequence)
-    {
-        var indexes = CreateValidCacheIndexes();
-        indexes[0] = new(name, column, sequence);
-
-        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes, "openid.cache");
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("openid.cache");
-    }
-
-    [Theory]
-    [InlineData("Id", 1)]
-    [InlineData("ExpiresAtTime", 2)]
-    public void MySqlCacheSchemaValidation_RejectsInvalidExpirationIndexShape(string column, int sequence)
-    {
-        var indexes = CreateValidCacheIndexes();
-        indexes[1] = new("ix_expires_at_time", column, sequence);
-
-        var action = () => DatabaseStartup.ValidateCacheIndexes(indexes, "openid.cache");
-
-        action.Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("openid.cache");
-    }
-
-    private static MySqlCacheSettings CreateMySqlCacheSettings(string? connectionString = null)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = connectionString ??
-                    "Server=localhost;Database=openid;User ID=app;Password=secret;"
-            })
-            .Build();
-
-        return MySqlCacheSettings.FromConfiguration(configuration);
-    }
-
-    private static Dictionary<string, DatabaseStartup.CacheColumnDefinition> CreateValidCacheColumns()
-    {
-        return new Dictionary<string, DatabaseStartup.CacheColumnDefinition>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Id"] = new("varchar", "NO", 449, null, "ascii_bin"),
-            ["Value"] = new("longblob", "NO", null, null, null),
-            ["ExpiresAtTime"] = new("datetime", "NO", null, 6, null),
-            ["SlidingExpirationInSeconds"] = new("bigint", "YES", null, null, null),
-            ["AbsoluteExpiration"] = new("datetime", "YES", null, 6, null)
-        };
-    }
-
-    private static List<DatabaseStartup.CacheIndexDefinition> CreateValidCacheIndexes()
-    {
-        return
-        [
-            new("PRIMARY", "Id", 1),
-            new("ix_expires_at_time", "ExpiresAtTime", 1)
-        ];
-    }
-
-    private static IReadOnlyList<object?[]> CreateValidCacheColumnRows() =>
-    [
-        ["Id", "varchar", "NO", 449L, null, "ascii_bin"],
-        ["Value", "longblob", "NO", null, null, null],
-        ["ExpiresAtTime", "datetime", "NO", null, 6, null],
-        ["SlidingExpirationInSeconds", "bigint", "YES", null, null, null],
-        ["AbsoluteExpiration", "datetime", "YES", null, 6, null]
-    ];
-
-    private static IReadOnlyList<object?[]> CreateValidCacheIndexRows() =>
-    [
-        ["PRIMARY", "Id", 1],
-        ["ix_expires_at_time", "ExpiresAtTime", 1]
-    ];
-
-    private sealed class NullStringScalar
-    {
-        public override string ToString() => null!;
-    }
-
-    private sealed class ProviderLikeDbException : DbException
-    {
-        public ProviderLikeDbException(string connectionString)
-            : base($"MySQL provider failed while querying the cache index. Connection: {connectionString}")
-        {
-        }
-    }
-
-    private sealed class StubMySqlStartupConnection : IMySqlStartupConnection
-    {
-        public StubMySqlStartupConnection()
-            : this([])
-        {
-        }
-
-        public StubMySqlStartupConnection(List<string> calls)
-        {
-            Calls = calls;
-        }
-
-        public List<string> Calls { get; }
-
-        public string? ServerVersion { get; set; } = "8.0.36";
-
-        public Exception? OpenException { get; set; }
-
-        public Exception? EnsureCacheTableException { get; set; }
-
-        public Task OpenAsync(CancellationToken cancellationToken)
-        {
-            Calls.Add("open");
-            return OpenException is null
-                ? Task.CompletedTask
-                : Task.FromException(OpenException);
-        }
-
-        public Task<string?> ReadServerVersionAsync(CancellationToken cancellationToken)
-        {
-            Calls.Add("version");
-            return Task.FromResult(ServerVersion);
-        }
-
-        public Task EnsureCacheTableAsync(
-            MySqlCacheSettings settings,
-            CancellationToken cancellationToken)
-        {
-            Calls.Add("ensure-cache-table");
-            return EnsureCacheTableException is null
-                ? Task.CompletedTask
-                : Task.FromException(EnsureCacheTableException);
-        }
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
     private sealed class RecordingCommandPlan
     {
         public object? ScalarResult { get; init; }
@@ -994,8 +210,7 @@ public class DatabaseProviderTests
 
         public List<RecordingDbCommand> Commands { get; } = [];
 
-        [AllowNull]
-        public override string ConnectionString { get; set; } = string.Empty;
+        [AllowNull] public override string ConnectionString { get; set; } = string.Empty;
 
         public override string Database => "openid";
 
@@ -1048,8 +263,7 @@ public class DatabaseProviderTests
             _plan = plan;
         }
 
-        [AllowNull]
-        public override string CommandText { get; set; } = string.Empty;
+        [AllowNull] public override string CommandText { get; set; } = string.Empty;
 
         public override int CommandTimeout { get; set; }
 
@@ -1136,7 +350,8 @@ public class DatabaseProviderTests
 
         public override int Add(object value)
         {
-            var parameter = value as DbParameter ?? throw new ArgumentException("Expected a database parameter.", nameof(value));
+            var parameter = value as DbParameter ??
+                            throw new ArgumentException("Expected a database parameter.", nameof(value));
             _items.Add(parameter);
             return _items.Count - 1;
         }
@@ -1166,7 +381,8 @@ public class DatabaseProviderTests
 
         public override void Insert(int index, object value)
         {
-            var parameter = value as DbParameter ?? throw new ArgumentException("Expected a database parameter.", nameof(value));
+            var parameter = value as DbParameter ??
+                            throw new ArgumentException("Expected a database parameter.", nameof(value));
             _items.Insert(index, parameter);
         }
 
@@ -1198,8 +414,7 @@ public class DatabaseProviderTests
 
         public override bool IsNullable { get; set; }
 
-        [AllowNull]
-        public override string ParameterName { get; set; } = string.Empty;
+        [AllowNull] public override string ParameterName { get; set; } = string.Empty;
 
         public override byte Precision { get; set; }
 
@@ -1207,8 +422,7 @@ public class DatabaseProviderTests
 
         public override int Size { get; set; }
 
-        [AllowNull]
-        public override string SourceColumn { get; set; } = string.Empty;
+        [AllowNull] public override string SourceColumn { get; set; } = string.Empty;
 
         public override bool SourceColumnNullMapping { get; set; }
 

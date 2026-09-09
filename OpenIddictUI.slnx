@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/docs/">
+    <File Path="docs\database-deployment.md" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".github\workflows\build-image.yml" />
     <File Path=".gitignore" />

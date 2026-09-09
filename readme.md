@@ -342,3 +342,14 @@ Token 端点使用插件化的 `IGrantHandler` 接口：
 - **JWT 验证**: API 项目的 `ValidateAudience`/`ValidateIssuer` 应设为 `true`
 - **凭据管理**: 数据库连接串、API Key 等敏感配置应从环境变量或密钥管理服务获取
 - **限速**: 登录、token、短信端点建议添加 rate limiting 中间件
+### EF migration command
+
+```
+src/OpenIddictUI
+
+# PostgreSQL
+dotnet ef migrations add AddYourChange --context AppDbContext --output-dir Migrations/Postgre
+
+# MySQL
+dotnet ef migrations add OpenIddictSchema --context MySqlAppDbContext --output-dir Migrations/MySql
+```

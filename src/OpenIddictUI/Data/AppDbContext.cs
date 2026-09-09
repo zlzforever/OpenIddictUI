@@ -29,31 +29,30 @@ public class AppDbContext : IdentityDbContext<User>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
-        AppDbContextModelConfiguration.Configure(builder, _identityOptions);
-    }
-}
 
-internal static class AppDbContextModelConfiguration
-{
-    public static void Configure(ModelBuilder builder, IdentityExtensionOptions identityOptions)
-    {
         // 注册 OpenIddict 实体映射（Applications/Scopes/Authorizations/Tokens 表）
         builder.UseOpenIddict();
 
         // Identity 表由外部用户管理系统维护，不纳入 EF Migration
-        ConfigureIdentityTables(builder, identityOptions);
+        ConfigureIdentityTables(builder);
+
+        AdjustModelCreating(builder);
 
         // 软删除：通过全局查询过滤器自动过滤 IsDeleted=true 的记录
-        ConfigureSoftDelete(builder, identityOptions);
+        ConfigureSoftDelete(builder);
 
         // 所有表名、列名、索引名、外键名统一转为 lowercase_snake_case
         ApplySnakeCaseNaming(builder);
     }
 
-    // 映射 Identity 表到可配置的表名，并排除出 Migration
-    private static void ConfigureIdentityTables(ModelBuilder builder, IdentityExtensionOptions identityOptions)
+    protected virtual void AdjustModelCreating(ModelBuilder builder)
     {
-        var t = identityOptions.Tables;
+    }
+
+    // 映射 Identity 表到可配置的表名，并排除出 Migration
+    private void ConfigureIdentityTables(ModelBuilder builder)
+    {
+        var t = _identityOptions.Tables;
         builder.Entity<User>().ToTable(t.Users, tb => tb.ExcludeFromMigrations());
         builder.Entity<IdentityRole>().ToTable(t.Roles, tb => tb.ExcludeFromMigrations());
         builder.Entity<IdentityUserRole<string>>().ToTable(t.UserRoles, tb => tb.ExcludeFromMigrations());
@@ -65,9 +64,9 @@ internal static class AppDbContextModelConfiguration
 
     // 软删除列名来自 IdentityExtensionOptions.SoftDeleteColumn，为 null 则跳过
     // HasQueryFilter 使用实体属性名 IsDeleted（非数据库列名），EF Core 自动映射
-    private static void ConfigureSoftDelete(ModelBuilder builder, IdentityExtensionOptions identityOptions)
+    private void ConfigureSoftDelete(ModelBuilder builder)
     {
-        var col = identityOptions.SoftDeleteColumn;
+        var col = _identityOptions.SoftDeleteColumn;
         if (string.IsNullOrEmpty(col))
         {
             return;
@@ -77,7 +76,7 @@ internal static class AppDbContextModelConfiguration
         builder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
     }
 
-    private static void ApplySnakeCaseNaming(ModelBuilder builder)
+    private void ApplySnakeCaseNaming(ModelBuilder builder)
     {
         foreach (var entity in builder.Model.GetEntityTypes())
         {
@@ -107,12 +106,13 @@ internal static class AppDbContextModelConfiguration
         }
     }
 
-    private static string ToSnake(string input)
+    private string ToSnake(string input)
     {
         if (string.IsNullOrEmpty(input))
         {
             return input;
         }
+
         var result = string.Concat(input.Select((c, i) =>
             i > 0 && char.IsUpper(c) && !char.IsUpper(input[i - 1])
                 ? "_" + char.ToLowerInvariant(c)

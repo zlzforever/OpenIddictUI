@@ -2,6 +2,7 @@ using Identity.Sm;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using OpenIddictUI.Data;
 using OpenIddictUI.Extensions;
 using OpenIddictUI.Grants;
@@ -23,9 +24,6 @@ public partial class Program
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("OpenIddictUI starting");
 
-        await DatabaseStartup.InitializeAsync(
-            app.Services,
-            DatabaseProviderResolver.Resolve(app.Configuration));
         await SeedData.ApplyAsync(app.Services);
         await app.RunAsync();
     }
@@ -34,103 +32,48 @@ public partial class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.AddSubstitution();
-
         builder.Configuration.AddJsonFile("openiddict-seed.json", optional: true, reloadOnChange: true);
-
         builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
+
         var config = builder.Configuration;
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new ApplicationException("DefaultConnection is required");
+        }
 
         var openiddictOptionSection = config.GetSection("OpenIddict");
         builder.Services.Configure<OpenIddictOptions>(openiddictOptionSection);
         builder.Services.Configure<IdentityExtensionOptions>(config.GetSection("IdentityExtension"));
         builder.Services.Configure<IdentityOptions>(config.GetSection("Identity"));
         builder.Services.Configure<CookiePolicyOptions>(config.GetSection("CookiePolicy"));
+
         var openiddictOptions = openiddictOptionSection.Exists()
             ? openiddictOptionSection.Get<OpenIddictOptions>() ?? new OpenIddictOptions()
             : new OpenIddictOptions();
         var migrationsTable = string.IsNullOrWhiteSpace(openiddictOptions.MigrationsHistoryTable)
             ? "openiddict_migrations_history"
             : openiddictOptions.MigrationsHistoryTable;
+
         var databaseProvider = DatabaseProviderResolver.Resolve(config);
-        MySqlCacheSettings? mySqlCacheSettings = null;
-        if (databaseProvider == DatabaseProvider.MySql)
-        {
-            mySqlCacheSettings = MySqlCacheSettings.FromConfiguration(config);
-            builder.Services.AddSingleton(mySqlCacheSettings);
-        }
+        // MySqlCacheSettings? mySqlCacheSettings = null;
+        // if (databaseProvider == DatabaseProvider.MySql)
+        // {
+        //     mySqlCacheSettings = MySqlCacheSettings.FromConfiguration(config);
+        //     builder.Services.AddSingleton(mySqlCacheSettings);
+        // }
 
         builder.Services.AddHealthChecks();
-        if (databaseProvider == DatabaseProvider.Postgres)
-        {
-            builder.Services.AddDbContextPool<AppDbContext>(options =>
-            {
-                options.UseNpgsql(config.GetConnectionString("DefaultConnection"),
-                    npgsql => npgsql
-                        .MigrationsHistoryTable(migrationsTable)
-                        .MigrationsAssembly(typeof(AppDbContext).Assembly.GetName().Name));
-                options.UseOpenIddict();
-            });
-        }
-        else
-        {
-            builder.Services.AddDbContextPool<MySqlAppDbContext>(options =>
-            {
-                options.UseMySql(
-                    config.GetConnectionString("DefaultConnection"),
-                    new MySqlServerVersion(new Version(8, 0, 0)),
-                    mysql => mysql
-                        .MigrationsHistoryTable(migrationsTable)
-                        .MigrationsAssembly(typeof(MySqlAppDbContext).Assembly.GetName().Name));
-                options.UseOpenIddict();
-            });
-            // 保留既有 AppDbContext 解析路径，SeedData 和业务调用方无需分叉。
-            builder.Services.AddScoped<AppDbContext>(services =>
-                services.GetRequiredService<MySqlAppDbContext>());
-        }
 
-        if (databaseProvider == DatabaseProvider.Postgres)
-        {
-            builder.Services.AddDistributedPostgresCache(options =>
-            {
-                options.ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-                options.SchemaName = builder.Configuration.GetValue<string>("PostgresCache:SchemaName", "public");
-                options.TableName = builder.Configuration.GetValue<string>("PostgresCache:TableName", "cache");
-                options.CreateIfNotExists = builder.Configuration.GetValue("PostgresCache:CreateIfNotExists", true);
-                options.UseWAL = builder.Configuration.GetValue("PostgresCache:UseWAL", false);
+        RegisterDbContext(builder, databaseProvider, connectionString, migrationsTable);
 
-                var expirationInterval =
-                    builder.Configuration.GetValue<string>("PostgresCache:ExpiredItemsDeletionInterval");
-                if (!string.IsNullOrEmpty(expirationInterval) && TimeSpan.TryParse(expirationInterval, out var interval))
-                {
-                    options.ExpiredItemsDeletionInterval = interval;
-                }
-
-                var slidingExpiration = builder.Configuration.GetValue<string>("PostgresCache:DefaultSlidingExpiration");
-                if (!string.IsNullOrEmpty(slidingExpiration) && TimeSpan.TryParse(slidingExpiration, out var sliding))
-                {
-                    options.DefaultSlidingExpiration = sliding;
-                }
-            });
-        }
-        else
-        {
-            builder.Services.AddDistributedMySqlCache(options =>
-            {
-                var settings = mySqlCacheSettings!;
-                options.ConnectionString = settings.ConnectionString;
-                options.SchemaName = settings.SchemaName;
-                options.TableName = settings.TableName;
-                options.ExpiredItemsDeletionInterval = settings.ExpiredItemsDeletionInterval;
-                options.DefaultSlidingExpiration = settings.DefaultSlidingExpiration;
-            });
-        }
-        builder.Services.AddHybridCache();
+        RegisterCache(builder, databaseProvider, connectionString);
 
         var identityBuilder = builder.Services.AddIdentity<User, IdentityRole>(options =>
-            {
-                // 使用短名，避免 XML URL 长名
-                options.ClaimsIdentity.RoleClaimType = "role";
-            });
+        {
+            // 使用短名，避免 XML URL 长名
+            options.ClaimsIdentity.RoleClaimType = "role";
+        });
         if (databaseProvider == DatabaseProvider.Postgres)
         {
             identityBuilder.AddEntityFrameworkStores<AppDbContext>();
@@ -139,6 +82,7 @@ public partial class Program
         {
             identityBuilder.AddEntityFrameworkStores<MySqlAppDbContext>();
         }
+
         identityBuilder.AddDefaultTokenProviders();
 
         if (bool.TryParse(builder.Configuration["ENABLE_SM3_PASSWORD_HASHER"],
@@ -285,5 +229,106 @@ public partial class Program
         PluginLoader.Use(app, app.Services.GetRequiredService<ILoggerFactory>());
 
         return app;
+    }
+
+    private static void RegisterCache(WebApplicationBuilder builder, DatabaseProvider databaseProvider,
+        string connectionString)
+    {
+        if (databaseProvider == DatabaseProvider.Postgres)
+        {
+            builder.Services.AddDistributedPostgresCache(options =>
+            {
+                options.ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+                options.SchemaName = builder.Configuration.GetValue<string>("PostgresCache:SchemaName", "public");
+                options.TableName =
+                    builder.Configuration.GetValue<string>("PostgresCache:TableName", "openiddict_cache_entries");
+                options.CreateIfNotExists = builder.Configuration.GetValue("PostgresCache:CreateIfNotExists", true);
+                options.UseWAL = builder.Configuration.GetValue("PostgresCache:UseWAL", false);
+
+                var expirationInterval =
+                    builder.Configuration.GetValue<string>("PostgresCache:ExpiredItemsDeletionInterval");
+                if (!string.IsNullOrEmpty(expirationInterval) &&
+                    TimeSpan.TryParse(expirationInterval, out var interval))
+                {
+                    options.ExpiredItemsDeletionInterval = interval;
+                }
+
+                var slidingExpiration =
+                    builder.Configuration.GetValue<string>("PostgresCache:DefaultSlidingExpiration");
+                if (!string.IsNullOrEmpty(slidingExpiration) && TimeSpan.TryParse(slidingExpiration, out var sliding))
+                {
+                    options.DefaultSlidingExpiration = sliding;
+                }
+            });
+        }
+        else
+        {
+            builder.Services.AddDistributedMySqlCache(options =>
+            {
+                var connectionBuilder = new MySqlConnectionStringBuilder(connectionString);
+
+                var databaseName = connectionBuilder.Database;
+
+                options.ConnectionString = connectionString;
+                options.SchemaName = databaseName;
+                options.TableName =
+                    builder.Configuration.GetValue<string>("MySqlCache:TableName", "openiddict_cache_entries");
+
+                var expirationInterval =
+                    builder.Configuration.GetValue<string>("MySqlCache:ExpiredItemsDeletionInterval");
+                if (!string.IsNullOrEmpty(expirationInterval) &&
+                    TimeSpan.TryParse(expirationInterval, out var interval))
+                {
+                    options.ExpiredItemsDeletionInterval = interval;
+                }
+
+                var slidingExpiration =
+                    builder.Configuration.GetValue<string>("MySqlCache:DefaultSlidingExpiration");
+                if (!string.IsNullOrEmpty(slidingExpiration) && TimeSpan.TryParse(slidingExpiration, out var sliding))
+                {
+                    options.DefaultSlidingExpiration = sliding;
+                }
+
+                var createIfNotExists = builder.Configuration.GetValue("MySqlCache:CreateIfNotExists", true);
+                if (createIfNotExists)
+                {
+                    DatabaseStartup.InitializeMySql(options);
+                }
+            });
+        }
+
+        builder.Services.AddHybridCache();
+    }
+
+    private static void RegisterDbContext(WebApplicationBuilder builder, DatabaseProvider databaseProvider,
+        string connectionString, string migrationsTable)
+    {
+        if (databaseProvider == DatabaseProvider.Postgres)
+        {
+            builder.Services.AddDbContextPool<AppDbContext>(options =>
+            {
+                options.UseNpgsql(connectionString,
+                    npgsql => npgsql
+                        .MigrationsHistoryTable(migrationsTable)
+                        .MigrationsAssembly(typeof(AppDbContext).Assembly.GetName().Name));
+                options.UseOpenIddict();
+            });
+        }
+        else
+        {
+            builder.Services.AddDbContextPool<MySqlAppDbContext>(options =>
+            {
+                options.UseMySql(
+                    connectionString,
+                    ServerVersion.AutoDetect(connectionString),
+                    mysql => mysql
+                        .MigrationsHistoryTable(migrationsTable)
+                        .MigrationsAssembly(typeof(MySqlAppDbContext).Assembly.GetName().Name));
+                options.UseOpenIddict();
+            });
+            // 保留既有 AppDbContext 解析路径，SeedData 和业务调用方无需分叉。
+            builder.Services.AddScoped<AppDbContext>(services =>
+                services.GetRequiredService<MySqlAppDbContext>());
+        }
     }
 }

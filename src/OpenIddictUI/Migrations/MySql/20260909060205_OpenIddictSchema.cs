@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace OpenIddictUI.Migrations.MySql
 {
     /// <inheritdoc />
-    public partial class MySqlOpenIddictSchema : Migration
+    public partial class OpenIddictSchema : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,13 +18,13 @@ namespace OpenIddictUI.Migrations.MySql
                 name: "openiddict_applications",
                 columns: table => new
                 {
-                    id = table.Column<string>(type: "varchar(255)", nullable: false)
+                    id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     application_type = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     client_id = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    client_secret = table.Column<string>(type: "longtext", nullable: true)
+                    client_secret = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     client_type = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
@@ -32,23 +32,23 @@ namespace OpenIddictUI.Migrations.MySql
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     consent_type = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    display_name = table.Column<string>(type: "longtext", nullable: true)
+                    display_name = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    display_names = table.Column<string>(type: "longtext", nullable: true)
+                    display_names = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    json_web_key_set = table.Column<string>(type: "longtext", nullable: true)
+                    json_web_key_set = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    permissions = table.Column<string>(type: "longtext", nullable: true)
+                    permissions = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    post_logout_redirect_uris = table.Column<string>(type: "longtext", nullable: true)
+                    post_logout_redirect_uris = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    properties = table.Column<string>(type: "longtext", nullable: true)
+                    properties = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    redirect_uris = table.Column<string>(type: "longtext", nullable: true)
+                    redirect_uris = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    requirements = table.Column<string>(type: "longtext", nullable: true)
+                    requirements = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    settings = table.Column<string>(type: "longtext", nullable: true)
+                    settings = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4")
                 },
                 constraints: table =>
@@ -61,23 +61,23 @@ namespace OpenIddictUI.Migrations.MySql
                 name: "openiddict_scopes",
                 columns: table => new
                 {
-                    id = table.Column<string>(type: "varchar(255)", nullable: false)
+                    id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     concurrency_token = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    description = table.Column<string>(type: "longtext", nullable: true)
+                    description = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    descriptions = table.Column<string>(type: "longtext", nullable: true)
+                    descriptions = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    display_name = table.Column<string>(type: "longtext", nullable: true)
+                    display_name = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    display_names = table.Column<string>(type: "longtext", nullable: true)
+                    display_names = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true)
+                    name = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    properties = table.Column<string>(type: "longtext", nullable: true)
+                    properties = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    resources = table.Column<string>(type: "longtext", nullable: true)
+                    resources = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4")
                 },
                 constraints: table =>
@@ -90,20 +90,20 @@ namespace OpenIddictUI.Migrations.MySql
                 name: "openiddict_authorizations",
                 columns: table => new
                 {
-                    id = table.Column<string>(type: "varchar(255)", nullable: false)
+                    id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    application_id = table.Column<string>(type: "varchar(255)", nullable: true)
+                    application_id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     concurrency_token = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     creation_date = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    properties = table.Column<string>(type: "longtext", nullable: true)
+                    properties = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    scopes = table.Column<string>(type: "longtext", nullable: true)
+                    scopes = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    subject = table.Column<string>(type: "varchar(400)", maxLength: 400, nullable: true)
+                    subject = table.Column<string>(type: "varchar(255)", maxLength: 255, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     type = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4")
@@ -123,26 +123,26 @@ namespace OpenIddictUI.Migrations.MySql
                 name: "openiddict_tokens",
                 columns: table => new
                 {
-                    id = table.Column<string>(type: "varchar(255)", nullable: false)
+                    id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    application_id = table.Column<string>(type: "varchar(255)", nullable: true)
+                    application_id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    authorization_id = table.Column<string>(type: "varchar(255)", nullable: true)
+                    authorization_id = table.Column<string>(type: "varchar(36)", maxLength: 36, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     concurrency_token = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     creation_date = table.Column<DateTime>(type: "datetime(6)", nullable: true),
                     expiration_date = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    payload = table.Column<string>(type: "longtext", nullable: true)
+                    payload = table.Column<string>(type: "text", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    properties = table.Column<string>(type: "longtext", nullable: true)
+                    properties = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     redemption_date = table.Column<DateTime>(type: "datetime(6)", nullable: true),
                     reference_id = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     status = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    subject = table.Column<string>(type: "varchar(400)", maxLength: 400, nullable: true)
+                    subject = table.Column<string>(type: "varchar(255)", maxLength: 255, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     type = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4")
