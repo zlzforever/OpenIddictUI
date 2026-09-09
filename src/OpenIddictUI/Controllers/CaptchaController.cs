@@ -36,6 +36,10 @@ public class CaptchaController(
         {
             CaptchaTypeface = SKTypeface.FromFile(fontPath);
         }
+
+        // 打印日志确认
+        Console.WriteLine(
+            $"[FONT INIT] IsEmpty:{CaptchaTypeface?.IsEmpty ?? false}, Family:{CaptchaTypeface?.FamilyName}");
     }
 
     // ---- 图形验证码 ----
