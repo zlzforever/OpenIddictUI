@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -54,11 +55,50 @@ public class ApplicationsController(
         return Ok(new ApiResult { Data = apps });
     }
 
+    [HttpGet("{id}")]
+    public async Task<IActionResult> Get(string id)
+    {
+        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        var app = await applicationManager.FindByIdAsync(id);
+        if (app == null) return Ok(Errors.UserNotExistResult);
+
+        var permissions = (await applicationManager.GetPermissionsAsync(app)).ToList();
+        var requirements = await applicationManager.GetRequirementsAsync(app);
+        var settings = await applicationManager.GetSettingsAsync(app);
+
+        return Ok(new ApiResult
+        {
+            Data = new
+            {
+                id = await applicationManager.GetIdAsync(app),
+                clientId = await applicationManager.GetClientIdAsync(app),
+                displayName = await applicationManager.GetDisplayNameAsync(app),
+                clientType = await applicationManager.GetClientTypeAsync(app) ?? "confidential",
+                applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
+                consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
+                redirectUris = await applicationManager.GetRedirectUrisAsync(app),
+                postLogoutRedirectUris = await applicationManager.GetPostLogoutRedirectUrisAsync(app),
+                grantTypes = permissions.Where(p => p.StartsWith("gt:")).Select(p => p[3..]).ToList(),
+                scopes = permissions.Where(p => p.StartsWith("scp:")).Select(p => p[4..]).ToList(),
+                clientUrl = settings.GetValueOrDefault("client_url"),
+                clientLogoUrl = settings.GetValueOrDefault("client_logo_url"),
+                enabled = settings.GetValueOrDefault("enabled") ?? "true",
+                requirePkce = requirements.Contains(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange),
+                accessTokenLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.AccessToken),
+                authorizationCodeLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.AuthorizationCode),
+                refreshTokenLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.RefreshToken),
+                identityTokenLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.IdentityToken),
+                deviceCodeLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.DeviceCode),
+                userCodeLifetime = GetLifetimeSeconds(settings, OpenIddictConstants.Settings.TokenLifetimes.UserCode)
+            }
+        });
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ApplicationInput input)
     {
         if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
-        var err = ValidateApplicationInput(input);
+        var err = ValidateApplicationInput(input, isUpdate: false);
         if (err != null) return Ok(err);
         if (await applicationManager.FindByClientIdAsync(input.ClientId) != null)
             return Ok(Errors.InvalidRequest);
@@ -71,29 +111,28 @@ public class ApplicationsController(
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
         if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
-        var err = ValidateApplicationInput(input);
+        var err = ValidateApplicationInput(input, isUpdate: true);
         if (err != null) return Ok(err);
         var app = await applicationManager.FindByIdAsync(id);
         if (app == null) return Ok(Errors.UserNotExistResult);
 
-        var descriptor = BuildDescriptor(input);
-        foreach (var p in await applicationManager.GetPermissionsAsync(app))
-            if (!p.StartsWith("scp:") && !p.StartsWith("gt:"))
-                descriptor.Permissions.Add(p);
+        var descriptor = new OpenIddictApplicationDescriptor();
+        await applicationManager.PopulateAsync(descriptor, app, CancellationToken.None);
+        BuildDescriptor(input, descriptor);
 
         await applicationManager.UpdateAsync(app, descriptor, CancellationToken.None);
         return Ok(ApiResult.Ok("更新成功"));
     }
 
-    private static ApiResult? ValidateApplicationInput(ApplicationInput input)
+    private static ApiResult? ValidateApplicationInput(ApplicationInput input, bool isUpdate)
     {
         var err = (int code, string msg) => ApiResult.Error(code, msg);
 
-        if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
+        if (input.ClientType == "public" && !string.IsNullOrWhiteSpace(input.ClientSecret))
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
 
-        if (input.ClientType == "confidential" && string.IsNullOrEmpty(input.ClientSecret) &&
-            string.IsNullOrEmpty(input.JsonWebKeySet))
+        if (!isUpdate && input.ClientType == "confidential" && string.IsNullOrWhiteSpace(input.ClientSecret) &&
+            string.IsNullOrWhiteSpace(input.JsonWebKeySet))
             return err(Errors.InvalidRequest.Code, "confidential 客户端必须设置 ClientSecret 或 JWKS");
 
         if (input.GrantTypes?.Contains("authorization_code") == true &&
@@ -111,28 +150,50 @@ public class ApplicationsController(
         return null;
     }
 
-    private static OpenIddictApplicationDescriptor BuildDescriptor(ApplicationInput input)
+    private static OpenIddictApplicationDescriptor BuildDescriptor(
+        ApplicationInput input, OpenIddictApplicationDescriptor? descriptor = null)
     {
         var isPublic = string.Equals(input.ClientType, "public", StringComparison.OrdinalIgnoreCase);
-        var descriptor = new OpenIddictApplicationDescriptor
+        descriptor ??= new OpenIddictApplicationDescriptor();
+        descriptor.ClientId = input.ClientId;
+        descriptor.ClientType = input.ClientType ?? "confidential";
+        descriptor.ConsentType = input.ConsentType ?? "implicit";
+        descriptor.DisplayName = input.DisplayName;
+        descriptor.ApplicationType = input.ApplicationType ?? "web";
+
+        if (isPublic)
         {
-            ClientId = input.ClientId,
-            ClientSecret = isPublic ? null : input.ClientSecret,
-            ClientType = input.ClientType ?? "confidential",
-            ConsentType = input.ConsentType ?? "implicit",
-            DisplayName = input.DisplayName,
-            ApplicationType = input.ApplicationType ?? "web"
-        };
-        if (!string.IsNullOrWhiteSpace(input.JsonWebKeySet))
+            descriptor.ClientSecret = null;
+        }
+        else if (input.ClientSecret is not null)
         {
-            descriptor.JsonWebKeySet = new JsonWebKeySet(input.JsonWebKeySet);
+            descriptor.ClientSecret = input.ClientSecret;
         }
 
+        if (input.JsonWebKeySet is not null)
+        {
+            descriptor.JsonWebKeySet = string.IsNullOrWhiteSpace(input.JsonWebKeySet)
+                ? null
+                : new JsonWebKeySet(input.JsonWebKeySet);
+        }
+
+        descriptor.Settings.Remove("client_url");
         if (!string.IsNullOrEmpty(input.ClientUrl)) descriptor.Settings["client_url"] = input.ClientUrl;
+        descriptor.Settings.Remove("client_logo_url");
         if (!string.IsNullOrEmpty(input.ClientLogoUrl)) descriptor.Settings["client_logo_url"] = input.ClientLogoUrl;
         descriptor.Settings["enabled"] = input.Enabled ? "true" : "false";
 
+        var preservedPermissions = descriptor.Permissions
+            .Where(p => !p.StartsWith("scp:") && !p.StartsWith("gt:"))
+            .ToList();
+        descriptor.Permissions.Clear();
+        foreach (var permission in preservedPermissions)
+            descriptor.Permissions.Add(permission);
+
+        descriptor.RedirectUris.Clear();
         foreach (var u in input.RedirectUris ?? []) descriptor.RedirectUris.Add(new Uri(u));
+
+        descriptor.PostLogoutRedirectUris.Clear();
         foreach (var u in input.PostLogoutRedirectUris ?? []) descriptor.PostLogoutRedirectUris.Add(new Uri(u));
 
         // grant types → permissions
@@ -158,24 +219,31 @@ public class ApplicationsController(
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
 
         // public 客户端强制 PKCE
+        descriptor.Requirements.Clear();
         if (isPublic || input.RequirePkce)
             descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
 
         // Token lifetimes (seconds → TimeSpan)
-        if (input.AccessTokenLifetime.HasValue)
-            descriptor.SetAccessTokenLifetime(TimeSpan.FromSeconds(input.AccessTokenLifetime.Value));
-        if (input.AuthorizationCodeLifetime.HasValue)
-            descriptor.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(input.AuthorizationCodeLifetime.Value));
-        if (input.RefreshTokenLifetime.HasValue)
-            descriptor.SetRefreshTokenLifetime(TimeSpan.FromSeconds(input.RefreshTokenLifetime.Value));
-        if (input.IdentityTokenLifetime.HasValue)
-            descriptor.SetIdentityTokenLifetime(TimeSpan.FromSeconds(input.IdentityTokenLifetime.Value));
-        if (input.DeviceCodeLifetime.HasValue)
-            descriptor.SetDeviceCodeLifetime(TimeSpan.FromSeconds(input.DeviceCodeLifetime.Value));
-        if (input.UserCodeLifetime.HasValue)
-            descriptor.SetUserCodeLifetime(TimeSpan.FromSeconds(input.UserCodeLifetime.Value));
+        descriptor.SetAccessTokenLifetime(ToTimeSpan(input.AccessTokenLifetime));
+        descriptor.SetAuthorizationCodeLifetime(ToTimeSpan(input.AuthorizationCodeLifetime));
+        descriptor.SetRefreshTokenLifetime(ToTimeSpan(input.RefreshTokenLifetime));
+        descriptor.SetIdentityTokenLifetime(ToTimeSpan(input.IdentityTokenLifetime));
+        descriptor.SetDeviceCodeLifetime(ToTimeSpan(input.DeviceCodeLifetime));
+        descriptor.SetUserCodeLifetime(ToTimeSpan(input.UserCodeLifetime));
 
         return descriptor;
+    }
+
+    private static TimeSpan? ToTimeSpan(int? seconds)
+        => seconds.HasValue ? TimeSpan.FromSeconds(seconds.Value) : null;
+
+    private static int? GetLifetimeSeconds(IReadOnlyDictionary<string, string> settings, string key)
+    {
+        if (!settings.TryGetValue(key, out var value) ||
+            !TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var lifetime))
+            return null;
+
+        return (int)lifetime.TotalSeconds;
     }
 
     private bool IsAdmin() => User.Identity?.Name == "admin";
