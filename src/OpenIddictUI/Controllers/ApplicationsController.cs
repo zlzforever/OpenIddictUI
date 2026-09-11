@@ -111,10 +111,14 @@ public class ApplicationsController(
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
         if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
-        var err = ValidateApplicationInput(input, isUpdate: true);
-        if (err != null) return Ok(err);
         var app = await applicationManager.FindByIdAsync(id);
         if (app == null) return Ok(Errors.UserNotExistResult);
+
+        var err = ValidateApplicationInput(
+            input,
+            isUpdate: true,
+            existingClientType: await applicationManager.GetClientTypeAsync(app));
+        if (err != null) return Ok(err);
 
         var descriptor = new OpenIddictApplicationDescriptor();
         await applicationManager.PopulateAsync(descriptor, app, CancellationToken.None);
@@ -124,14 +128,20 @@ public class ApplicationsController(
         return Ok(ApiResult.Ok("更新成功"));
     }
 
-    private static ApiResult? ValidateApplicationInput(ApplicationInput input, bool isUpdate)
+    private static ApiResult? ValidateApplicationInput(
+        ApplicationInput input, bool isUpdate, string? existingClientType = null)
     {
         var err = (int code, string msg) => ApiResult.Error(code, msg);
+        var clientType = input.ClientType ?? "confidential";
 
-        if (input.ClientType == "public" && !string.IsNullOrWhiteSpace(input.ClientSecret))
+        if (string.Equals(clientType, "public", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(input.ClientSecret))
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
 
-        if (!isUpdate && input.ClientType == "confidential" && string.IsNullOrWhiteSpace(input.ClientSecret) &&
+        var requiresNewCredentials = !isUpdate ||
+            !string.Equals(existingClientType ?? "confidential", clientType, StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(clientType, "confidential", StringComparison.OrdinalIgnoreCase) &&
+            requiresNewCredentials && string.IsNullOrWhiteSpace(input.ClientSecret) &&
             string.IsNullOrWhiteSpace(input.JsonWebKeySet))
             return err(Errors.InvalidRequest.Code, "confidential 客户端必须设置 ClientSecret 或 JWKS");
 

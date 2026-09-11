@@ -87,6 +87,25 @@ public class ApplicationsControllerTests
     }
 
     [Fact]
+    public async Task Update_PublicToConfidentialWithoutCredentials_ReturnsValidationError()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"EC\",\"kid\":\"public\"}]}"),
+            existingSecret: string.Empty,
+            existingClientType: "public");
+
+        var result = await CreateController(manager).Update("app-1", ValidUpdateInput());
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        capture.Descriptor.Should().BeNull();
+        manager.Verify(x => x.UpdateAsync(
+            application, It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Update_WithNewSecret_PreservesExistingJwks()
     {
         var application = new object();
@@ -137,11 +156,14 @@ public class ApplicationsControllerTests
     private static (Mock<IOpenIddictApplicationManager> Manager, DescriptorCapture Capture) CreateUpdateManager(
         object application,
         JsonWebKeySet existingKeys,
-        string existingSecret)
+        string existingSecret,
+        string existingClientType = "confidential")
     {
         var capture = new DescriptorCapture();
         var manager = new Mock<IOpenIddictApplicationManager>();
         manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>())).ReturnsAsync(application);
+        manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingClientType);
         manager.Setup(x => x.GetPermissionsAsync(application, It.IsAny<CancellationToken>()))
             .ReturnsAsync(ImmutableArray<string>.Empty);
         manager.Setup(x => x.PopulateAsync(

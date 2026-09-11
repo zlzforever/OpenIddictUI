@@ -50,7 +50,7 @@ interface ApplicationDetailResponse {
   data?: ApplicationDetail
 }
 
-type ApplicationDetailLoader = (id: string) => Promise<ApplicationDetailResponse>
+export type ApplicationDetailLoader = (id: string) => Promise<ApplicationDetailResponse>
 
 export function createApplicationForm(): ApplicationForm {
   return {
@@ -113,6 +113,65 @@ export async function loadApplicationForm(
     return applicationFormFromDetail(response.data)
   } catch {
     return null
+  }
+}
+
+export interface ApplicationEditState {
+  form: ApplicationForm
+  editing: boolean
+  editId: string
+  showModal: boolean
+}
+
+export type ApplicationEditResult = 'loaded' | 'failed' | 'stale'
+
+type ApplicationEditStateListener = (state: ApplicationEditState) => void
+
+export function createApplicationEditController(
+  loadDetail: ApplicationDetailLoader,
+  applyState: ApplicationEditStateListener
+) {
+  let requestVersion = 0
+
+  const closedState = (): ApplicationEditState => ({
+    form: createApplicationForm(),
+    editing: false,
+    editId: '',
+    showModal: false
+  })
+
+  const invalidate = () => ++requestVersion
+
+  return {
+    openAdd() {
+      invalidate()
+      applyState({ ...closedState(), showModal: true })
+    },
+
+    close() {
+      invalidate()
+      applyState(closedState())
+    },
+
+    async openEdit(id: string): Promise<ApplicationEditResult> {
+      const version = invalidate()
+      applyState(closedState())
+
+      const loadedForm = await loadApplicationForm(id, loadDetail)
+      if (version !== requestVersion) return 'stale'
+      if (!loadedForm) {
+        applyState(closedState())
+        return 'failed'
+      }
+
+      applyState({
+        form: loadedForm,
+        editing: true,
+        editId: id,
+        showModal: true
+      })
+      return 'loaded'
+    }
   }
 }
 

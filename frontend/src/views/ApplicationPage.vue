@@ -33,7 +33,7 @@
     </div>
     <p v-else style="color:var(--text-muted)">{{ $t('applications.noData') }}</p>
 
-    <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="showModal=$event"
+    <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="updateModalVisibility"
       preset="card" style="width:740px;min-height:620px" :mask-closable="false">
       <n-form label-placement="top" size="small">
         <n-tabs type="segment" animated style="min-height:520px">
@@ -119,7 +119,7 @@
           <span v-if="valMsg" style="color:var(--error);font-size:0.8125rem">{{ valMsg }}</span>
         </div>
         <n-space justify="end">
-          <n-button @click="showModal=false">{{ $t('applications.close') }}</n-button>
+          <n-button @click="closeModal">{{ $t('applications.close') }}</n-button>
           <n-button type="primary" @click="handleSave">{{ $t('applications.save') }}</n-button>
         </n-space>
       </template>
@@ -135,8 +135,9 @@ import { getApplication, saveApplication } from '../services/api'
 import {
   buildApplicationPayload,
   createApplicationForm,
-  loadApplicationForm,
+  createApplicationEditController,
   type ApplicationDetail,
+  type ApplicationEditState,
   type ApplicationForm,
   validateApplicationForm
 } from './applicationForm'
@@ -155,6 +156,15 @@ const apps=ref<AppInfo[]>([]); const allScopes=ref<ScopeOpt[]>([]); const availa
 const showModal=ref(false); const editing=ref(false); const editId=ref(''); const valMsg=ref('')
 const form=ref<ApplicationForm>(createApplicationForm())
 
+function applyEditState(state: ApplicationEditState){
+  form.value=state.form
+  editing.value=state.editing
+  editId.value=state.editId
+  showModal.value=state.showModal
+}
+
+const editController=createApplicationEditController(getApplication, applyEditState)
+
 const scopeOpts = computed(() => allScopes.value.map(s => ({ label: s.displayName||s.name, value: s.name })))
 
 const sysNames = ['openid','profile','email','phone','address','roles','offline_access']
@@ -172,29 +182,18 @@ async function loadScopes(){ const r=await fetch(`${api}api/scopes`,{credentials
 async function loadGrantTypes(){ const r=await fetch(`${api}api/applications/grant-types`,{credentials:'include'}); if(r.ok) availableGrantTypes.value=(await r.json()).data||[]; else availableGrantTypes.value=['authorization_code','refresh_token'] }
 onMounted(async ()=>{ await loadApps(); await loadScopes(); await loadGrantTypes() })
 
-function openAdd(){ editing.value=false; editId.value=''; form.value=createApplicationForm(); valMsg.value=''; showModal.value=true }
+function openAdd(){ valMsg.value=''; editController.openAdd() }
+
+function closeModal(){ valMsg.value=''; editController.close() }
+
+function updateModalVisibility(value:boolean){
+  if(value) showModal.value=true
+  else closeModal()
+}
 
 async function openEdit(a:AppInfo){
-  showModal.value=false
-  editing.value=false
-  editId.value=''
-  form.value=createApplicationForm()
   valMsg.value=''
-
-  try {
-    const loadedForm=await loadApplicationForm(a.id,getApplication)
-    if(!loadedForm){
-      msg.error(t('applications.loadFailed'))
-      return
-    }
-
-    form.value=loadedForm
-    editId.value=a.id
-    editing.value=true
-    showModal.value=true
-  } catch {
-    msg.error(t('applications.loadFailed'))
-  }
+  if(await editController.openEdit(a.id)==='failed') msg.error(t('applications.loadFailed'))
 }
 
 async function handleSave(){
@@ -202,7 +201,7 @@ async function handleSave(){
   const validation=validateApplicationForm(form.value,editing.value)
   if(validation){ valMsg.value=t(`applications.${validation}`); return }
   const d=await saveApplication(buildApplicationPayload(form.value,editing.value),editing.value?editId.value:undefined)
-  if(d.code===200){ showModal.value=false; await loadApps(); msg.success(t('applications.saveSuccess')) } else msg.error(d.message||t('applications.saveFailed'))
+  if(d.code===200){ editController.close(); await loadApps(); msg.success(t('applications.saveSuccess')) } else msg.error(d.message||t('applications.saveFailed'))
 }
 
 async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${a.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadApps(); msg.success(t('applications.deleteSuccess')) } else msg.error(d.message||t('applications.deleteFailed')) }

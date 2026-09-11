@@ -108,3 +108,102 @@ test('detail loading returns no form when the request fails', async () => {
   assert.equal(failed, null)
   assert.equal(missing, null)
 })
+
+function deferred() {
+  let resolve
+  const promise = new Promise(value => { resolve = value })
+  return { promise, resolve }
+}
+
+function detail(id) {
+  return {
+    id,
+    clientId: id,
+    displayName: id,
+    clientType: 'public',
+    applicationType: 'web',
+    consentType: 'implicit',
+    enabled: 'true',
+    requirePkce: true
+  }
+}
+
+test('out-of-order edit responses keep the latest application selected', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  const requests = new Map()
+  let state
+  const controller = createApplicationEditController(async id => {
+    const request = deferred()
+    requests.set(id, request)
+    return request.promise
+  }, nextState => { state = nextState })
+
+  const first = controller.openEdit('app-a')
+  const second = controller.openEdit('app-b')
+
+  requests.get('app-b').resolve({ code: 200, data: detail('app-b') })
+  assert.equal(await second, 'loaded')
+  assert.equal(state.editId, 'app-b')
+  assert.equal(state.form.clientId, 'app-b')
+
+  requests.get('app-a').resolve({ code: 200, data: detail('app-a') })
+  assert.equal(await first, 'stale')
+  assert.equal(state.editId, 'app-b')
+  assert.equal(state.form.clientId, 'app-b')
+})
+
+test('a pending edit cannot reopen the modal after the user starts adding an application', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  const request = deferred()
+  let state
+  const controller = createApplicationEditController(async () => request.promise, nextState => { state = nextState })
+
+  const pending = controller.openEdit('app-a')
+  controller.openAdd()
+  assert.equal(state.showModal, true)
+  assert.equal(state.editing, false)
+  assert.equal(state.form.clientId, '')
+
+  request.resolve({ code: 200, data: detail('app-a') })
+  assert.equal(await pending, 'stale')
+  assert.equal(state.showModal, true)
+  assert.equal(state.editing, false)
+  assert.equal(state.form.clientId, '')
+})
+
+test('closing an edit invalidates its pending detail request', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  const request = deferred()
+  let state
+  const controller = createApplicationEditController(async () => request.promise, nextState => { state = nextState })
+
+  const pending = controller.openEdit('app-a')
+  controller.close()
+  request.resolve({ code: 200, data: detail('app-a') })
+
+  assert.equal(await pending, 'stale')
+  assert.equal(state.showModal, false)
+  assert.equal(state.editId, '')
+  assert.equal(state.form.clientId, '')
+})
+
+test('a failed detail request clears the previous form instead of reusing it', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  const secondRequest = deferred()
+  let state
+  const controller = createApplicationEditController(
+    id => id === 'app-a'
+      ? Promise.resolve({ code: 200, data: detail('app-a') })
+      : secondRequest.promise,
+    nextState => { state = nextState })
+
+  assert.equal(await controller.openEdit('app-a'), 'loaded')
+  assert.equal(state.form.clientId, 'app-a')
+
+  const failed = controller.openEdit('app-b')
+  secondRequest.resolve({ code: 500 })
+  assert.equal(await failed, 'failed')
+  assert.equal(state.showModal, false)
+  assert.equal(state.editId, '')
+  assert.equal(state.form.clientId, '')
+})
