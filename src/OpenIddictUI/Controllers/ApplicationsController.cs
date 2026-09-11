@@ -111,10 +111,13 @@ public class ApplicationsController(
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
         if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        var err = ValidateApplicationInput(input, isUpdate: true);
+        if (err != null) return Ok(err);
+
         var app = await applicationManager.FindByIdAsync(id);
         if (app == null) return Ok(Errors.UserNotExistResult);
 
-        var err = ValidateApplicationInput(
+        err = ValidateApplicationInput(
             input,
             isUpdate: true,
             existingClientType: await applicationManager.GetClientTypeAsync(app));
