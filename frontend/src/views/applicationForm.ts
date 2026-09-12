@@ -109,7 +109,9 @@ export async function loadApplicationForm(
 ): Promise<ApplicationForm | null> {
   try {
     const response = await loadDetail(id)
-    if (response.code !== 200 || !response.data) return null
+    if (response.code !== 200 || !response.data) {
+      return null
+    }
     return applicationFormFromDetail(response.data)
   } catch {
     return null
@@ -158,7 +160,9 @@ export function createApplicationEditController(
       applyState(closedState())
 
       const loadedForm = await loadApplicationForm(id, loadDetail)
-      if (version !== requestVersion) return 'stale'
+      if (version !== requestVersion) {
+        return 'stale'
+      }
       if (!loadedForm) {
         applyState(closedState())
         return 'failed'

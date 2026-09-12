@@ -207,3 +207,21 @@ test('a failed detail request clears the previous form instead of reusing it', a
   assert.equal(state.editId, '')
   assert.equal(state.form.clientId, '')
 })
+
+test('an exception during detail loading clears the previous form instead of reusing it', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  let state
+  const controller = createApplicationEditController(
+    id => id === 'app-a'
+      ? Promise.resolve({ code: 200, data: detail('app-a') })
+      : Promise.reject(new Error('network failure')),
+    nextState => { state = nextState })
+
+  assert.equal(await controller.openEdit('app-a'), 'loaded')
+  assert.equal(state.form.clientId, 'app-a')
+
+  assert.equal(await controller.openEdit('app-b'), 'failed')
+  assert.equal(state.showModal, false)
+  assert.equal(state.editId, '')
+  assert.equal(state.form.clientId, '')
+})

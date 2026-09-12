@@ -187,13 +187,13 @@ function openAdd(){ valMsg.value=''; editController.openAdd() }
 function closeModal(){ valMsg.value=''; editController.close() }
 
 function updateModalVisibility(value:boolean){
-  if(value) showModal.value=true
-  else closeModal()
+  if(value){ showModal.value=true }
+  else { closeModal() }
 }
 
 async function openEdit(a:AppInfo){
   valMsg.value=''
-  if(await editController.openEdit(a.id)==='failed') msg.error(t('applications.loadFailed'))
+  if(await editController.openEdit(a.id)==='failed'){ msg.error(t('applications.loadFailed')) }
 }
 
 async function handleSave(){

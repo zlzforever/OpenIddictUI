@@ -72,6 +72,59 @@ public class ApplicationsControllerTests
     }
 
     [Fact]
+    public async Task Get_NonAdminReturnsUnauthorizedWithoutLoadingApplication()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+
+        var result = await CreateController(manager, "operator").Get("app-1");
+
+        var api = result.Should().BeOfType<UnauthorizedObjectResult>().Subject.Value.Should()
+            .BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.NotAuthenticated.Code);
+        manager.Verify(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Get_UnknownIdReturnsUserNotExistResult()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((object?)null);
+
+        var result = await CreateController(manager).Get("missing");
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should()
+            .BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.UserNotExist);
+        api.Message.Should().Be("用户不存在");
+        manager.Verify(x => x.GetPermissionsAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_AuthorizationCodeWithoutRedirectUriReturnsValidationError()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            GrantTypes = ["authorization_code"],
+            RedirectUris = []
+        };
+
+        var result = await CreateController(manager).Create(input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should()
+            .BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("authorization_code grant 必须设置 RedirectUris");
+        manager.Verify(x => x.FindByClientIdAsync("client-1", It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Update_WithNullCredentials_PreservesExistingCredentials()
     {
         var application = new object();
@@ -80,7 +133,7 @@ public class ApplicationsControllerTests
 
         var result = await CreateController(manager).Update("app-1", ValidUpdateInput());
 
-        result.Should().BeOfType<OkObjectResult>();
+        AssertSuccess(result);
         capture.Descriptor.Should().NotBeNull();
         capture.Descriptor!.ClientSecret.Should().Be("old-secret");
         capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("old");
@@ -106,6 +159,25 @@ public class ApplicationsControllerTests
     }
 
     [Fact]
+    public async Task Update_NullClientTypeToConfidentialWithoutCredentials_ReturnsValidationError()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"EC\",\"kid\":\"public\"}]}"),
+            existingSecret: string.Empty,
+            existingClientType: null);
+
+        var result = await CreateController(manager).Update("app-1", ValidUpdateInput());
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        capture.Descriptor.Should().BeNull();
+        manager.Verify(x => x.UpdateAsync(
+            application, It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Update_WithNewSecret_PreservesExistingJwks()
     {
         var application = new object();
@@ -116,7 +188,7 @@ public class ApplicationsControllerTests
 
         var result = await CreateController(manager).Update("app-1", input);
 
-        result.Should().BeOfType<OkObjectResult>();
+        AssertSuccess(result);
         capture.Descriptor.Should().NotBeNull();
         capture.Descriptor!.ClientSecret.Should().Be("new-secret");
         capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("old");
@@ -133,13 +205,75 @@ public class ApplicationsControllerTests
 
         var result = await CreateController(manager).Update("app-1", input);
 
-        result.Should().BeOfType<OkObjectResult>();
+        AssertSuccess(result);
         capture.Descriptor.Should().NotBeNull();
         capture.Descriptor!.ClientSecret.Should().Be("old-secret");
         capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("new");
     }
 
-    private static ApplicationsController CreateController(Mock<IOpenIddictApplicationManager> manager)
+    [Fact]
+    public async Task Update_PreservesUrisPermissionsGrantsScopesPkceAndTokenLifetimes()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Permissions.Add("aud:existing-api");
+                descriptor.Permissions.Add("gt:old");
+                descriptor.Permissions.Add("scp:old");
+                descriptor.Requirements.Add("req:old");
+                descriptor.RedirectUris.Add(new Uri("https://old.example/callback"));
+                descriptor.PostLogoutRedirectUris.Add(new Uri("https://old.example/logout"));
+            });
+        var input = ValidUpdateInput();
+        input.RedirectUris = ["https://new.example/callback"];
+        input.PostLogoutRedirectUris = ["https://new.example/logout"];
+        input.GrantTypes = ["authorization_code", "refresh_token"];
+        input.Scopes = ["openid", "api"];
+        input.RequirePkce = true;
+        input.AccessTokenLifetime = 61;
+        input.AuthorizationCodeLifetime = 302;
+        input.RefreshTokenLifetime = 3603;
+        input.IdentityTokenLifetime = 3604;
+        input.DeviceCodeLifetime = 365;
+        input.UserCodeLifetime = 366;
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        var descriptor = capture.Descriptor!;
+        descriptor.RedirectUris.Should().BeEquivalentTo(new[] { new Uri("https://new.example/callback") });
+        descriptor.PostLogoutRedirectUris.Should().BeEquivalentTo(new[] { new Uri("https://new.example/logout") });
+        descriptor.Permissions.Should().BeEquivalentTo(new[]
+        {
+            "aud:existing-api",
+            "gt:authorization_code",
+            "gt:refresh_token",
+            OpenIddictConstants.Permissions.ResponseTypes.Code,
+            "scp:openid",
+            "scp:api",
+            OpenIddictConstants.Permissions.Endpoints.Authorization,
+            OpenIddictConstants.Permissions.Endpoints.Token,
+            OpenIddictConstants.Permissions.Endpoints.EndSession
+        });
+        descriptor.Requirements.Should().BeEquivalentTo(new[]
+        {
+            OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange
+        });
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.AccessToken].Should().Be("00:01:01");
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.AuthorizationCode].Should().Be("00:05:02");
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.RefreshToken].Should().Be("01:00:03");
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.IdentityToken].Should().Be("01:00:04");
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.DeviceCode].Should().Be("00:06:05");
+        descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.UserCode].Should().Be("00:06:06");
+    }
+
+    private static ApplicationsController CreateController(
+        Mock<IOpenIddictApplicationManager> manager, string userName = "admin")
     {
         var controller = new ApplicationsController(manager.Object, Array.Empty<IGrantHandler>());
         controller.ControllerContext = new ControllerContext
@@ -147,7 +281,7 @@ public class ApplicationsControllerTests
             HttpContext = new DefaultHttpContext
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity(
-                    [new Claim(ClaimTypes.Name, "admin")], "test"))
+                    [new Claim(ClaimTypes.Name, userName)], "test"))
             }
         };
         return controller;
@@ -157,7 +291,8 @@ public class ApplicationsControllerTests
         object application,
         JsonWebKeySet existingKeys,
         string existingSecret,
-        string existingClientType = "confidential")
+        string? existingClientType = "confidential",
+        Action<OpenIddictApplicationDescriptor>? configureExisting = null)
     {
         var capture = new DescriptorCapture();
         var manager = new Mock<IOpenIddictApplicationManager>();
@@ -172,6 +307,7 @@ public class ApplicationsControllerTests
             {
                 descriptor.ClientSecret = existingSecret;
                 descriptor.JsonWebKeySet = existingKeys;
+                configureExisting?.Invoke(descriptor);
             })
             .Returns(ValueTask.CompletedTask);
         manager.Setup(x => x.UpdateAsync(
@@ -188,6 +324,14 @@ public class ApplicationsControllerTests
         ApplicationType = "web",
         ConsentType = "implicit"
     };
+
+    private static void AssertSuccess(IActionResult result)
+    {
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should()
+            .BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeTrue();
+        api.Code.Should().Be(200);
+    }
 
     private sealed class DescriptorCapture
     {

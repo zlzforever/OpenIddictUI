@@ -58,9 +58,16 @@ public class ApplicationsController(
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id)
     {
-        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        if (!IsAdmin())
+        {
+            return Unauthorized(Errors.NotAuthenticated);
+        }
+
         var app = await applicationManager.FindByIdAsync(id);
-        if (app == null) return Ok(Errors.UserNotExistResult);
+        if (app == null)
+        {
+            return Ok(Errors.UserNotExistResult);
+        }
 
         var permissions = (await applicationManager.GetPermissionsAsync(app)).ToList();
         var requirements = await applicationManager.GetRequirementsAsync(app);
@@ -111,8 +118,11 @@ public class ApplicationsController(
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
         if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
-        var err = ValidateApplicationInput(input, isUpdate: true);
-        if (err != null) return Ok(err);
+        var err = ValidateApplicationInput(input, isUpdate: true, validateExistingClientType: false);
+        if (err != null)
+        {
+            return Ok(err);
+        }
 
         var app = await applicationManager.FindByIdAsync(id);
         if (app == null) return Ok(Errors.UserNotExistResult);
@@ -121,7 +131,10 @@ public class ApplicationsController(
             input,
             isUpdate: true,
             existingClientType: await applicationManager.GetClientTypeAsync(app));
-        if (err != null) return Ok(err);
+        if (err != null)
+        {
+            return Ok(err);
+        }
 
         var descriptor = new OpenIddictApplicationDescriptor();
         await applicationManager.PopulateAsync(descriptor, app, CancellationToken.None);
@@ -132,7 +145,10 @@ public class ApplicationsController(
     }
 
     private static ApiResult? ValidateApplicationInput(
-        ApplicationInput input, bool isUpdate, string? existingClientType = null)
+        ApplicationInput input,
+        bool isUpdate,
+        string? existingClientType = null,
+        bool validateExistingClientType = true)
     {
         var err = (int code, string msg) => ApiResult.Error(code, msg);
         var clientType = input.ClientType ?? "confidential";
@@ -141,8 +157,10 @@ public class ApplicationsController(
             !string.IsNullOrWhiteSpace(input.ClientSecret))
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
 
+        var normalizedExistingClientType = existingClientType ?? "public";
         var requiresNewCredentials = !isUpdate ||
-            !string.Equals(existingClientType ?? "confidential", clientType, StringComparison.OrdinalIgnoreCase);
+            (validateExistingClientType &&
+             !string.Equals(normalizedExistingClientType, clientType, StringComparison.OrdinalIgnoreCase));
         if (string.Equals(clientType, "confidential", StringComparison.OrdinalIgnoreCase) &&
             requiresNewCredentials && string.IsNullOrWhiteSpace(input.ClientSecret) &&
             string.IsNullOrWhiteSpace(input.JsonWebKeySet))
