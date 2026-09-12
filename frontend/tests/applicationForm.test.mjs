@@ -100,6 +100,18 @@ test('detail mapping uses detail values even when the list row is incomplete', a
   assert.equal(form.redirectUrisText, 'https://client.example/callback')
 })
 
+test('detail mapping treats a null client type as public', async () => {
+  const { applicationFormFromDetail } = await loadFormModule()
+
+  const form = applicationFormFromDetail({
+    id: 'app-1',
+    clientId: 'client-1',
+    clientType: null
+  })
+
+  assert.equal(form.clientType, 'public')
+})
+
 test('detail loading returns no form when the request fails', async () => {
   const { loadApplicationForm } = await loadFormModule()
 

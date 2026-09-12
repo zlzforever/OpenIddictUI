@@ -27,7 +27,7 @@ export interface ApplicationDetail {
   clientId: string
   displayName?: string
   applicationType?: string
-  clientType?: string
+  clientType?: string | null
   consentType?: string
   redirectUris?: string[]
   postLogoutRedirectUris?: string[]
@@ -84,7 +84,7 @@ export function applicationFormFromDetail(detail: ApplicationDetail): Applicatio
     clientId: detail.clientId,
     displayName: detail.displayName || '',
     applicationType: detail.applicationType || 'web',
-    clientType: detail.clientType || 'confidential',
+    clientType: detail.clientType || 'public',
     consentType: detail.consentType || 'implicit',
     redirectUrisText: (detail.redirectUris || []).join('\n'),
     postLogoutRedirectUrisText: (detail.postLogoutRedirectUris || []).join('\n'),

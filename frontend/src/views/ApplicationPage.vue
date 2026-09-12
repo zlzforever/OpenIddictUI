@@ -14,7 +14,7 @@
         <div class="app-card-info">
           <span class="app-card-meta">{{ a.clientId }}</span>
           <span class="app-card-meta">· {{ a.applicationType||'web' }}</span>
-          <span class="app-card-meta">· {{ a.clientType }}</span>
+          <span class="app-card-meta">· {{ a.clientType || 'public' }}</span>
           <span class="app-card-meta" v-if="a.clientUrl">· {{ a.clientUrl }}</span>
         </div>
         <div class="app-card-tags" v-if="(a.grantTypes||[]).length">

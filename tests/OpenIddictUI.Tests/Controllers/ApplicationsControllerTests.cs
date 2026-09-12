@@ -72,6 +72,168 @@ public class ApplicationsControllerTests
     }
 
     [Fact]
+    public async Task Get_NullClientTypeMapsToPublic()
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        manager.Setup(x => x.GetIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("app-1");
+        manager.Setup(x => x.GetClientIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("client-1");
+        manager.Setup(x => x.GetDisplayNameAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("Demo");
+        manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("web");
+        manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("implicit");
+        manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPostLogoutRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPermissionsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetRequirementsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetSettingsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>().ToImmutableDictionary());
+
+        var result = await CreateController(manager).Get("app-1");
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        var data = api.Data!;
+        data.GetType().GetProperty("clientType")!.GetValue(data).Should().Be("public");
+    }
+
+    [Fact]
+    public async Task Get_MissingOrInvalidLifetimeSettingsReturnNull()
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        manager.Setup(x => x.GetIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("app-1");
+        manager.Setup(x => x.GetClientIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("client-1");
+        manager.Setup(x => x.GetDisplayNameAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("Demo");
+        manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("web");
+        manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("confidential");
+        manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("implicit");
+        manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPostLogoutRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPermissionsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetRequirementsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetSettingsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>
+            {
+                [OpenIddictConstants.Settings.TokenLifetimes.AccessToken] = "invalid",
+                [OpenIddictConstants.Settings.TokenLifetimes.RefreshToken] = "invalid",
+                [OpenIddictConstants.Settings.TokenLifetimes.DeviceCode] = "invalid"
+            }.ToImmutableDictionary());
+
+        var result = await CreateController(manager).Get("app-1");
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        var data = api.Data!;
+        data.GetType().GetProperty("accessTokenLifetime")!.GetValue(data).Should().BeNull();
+        data.GetType().GetProperty("authorizationCodeLifetime")!.GetValue(data).Should().BeNull();
+        data.GetType().GetProperty("refreshTokenLifetime")!.GetValue(data).Should().BeNull();
+        data.GetType().GetProperty("identityTokenLifetime")!.GetValue(data).Should().BeNull();
+        data.GetType().GetProperty("deviceCodeLifetime")!.GetValue(data).Should().BeNull();
+        data.GetType().GetProperty("userCodeLifetime")!.GetValue(data).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task List_NullClientTypeMapsToPublic()
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.ListAsync(null, null, It.IsAny<CancellationToken>()))
+            .Returns(SingleApplication(application));
+        manager.Setup(x => x.GetIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("app-1");
+        manager.Setup(x => x.GetClientIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("client-1");
+        manager.Setup(x => x.GetDisplayNameAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("Demo");
+        manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPostLogoutRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPermissionsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetSettingsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>().ToImmutableDictionary());
+
+        var result = await CreateController(manager).List();
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        var rows = api.Data.Should().BeOfType<List<object>>().Subject;
+        rows.Should().ContainSingle();
+        rows[0].GetType().GetProperty("clientType")!.GetValue(rows[0]).Should().Be("public");
+    }
+
+    [Fact]
+    public async Task LegacyNullClientTypeCanBeLoadedAndSavedAsPublicWithoutCredentials()
+    {
+        var application = new object();
+        var capture = new DescriptorCapture();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        manager.Setup(x => x.GetIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("app-1");
+        manager.Setup(x => x.GetClientIdAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("client-1");
+        manager.Setup(x => x.GetDisplayNameAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("Demo");
+        manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("web");
+        manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("implicit");
+        manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPostLogoutRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetPermissionsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetRequirementsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImmutableArray<string>.Empty);
+        manager.Setup(x => x.GetSettingsAsync(application, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>().ToImmutableDictionary());
+        manager.Setup(x => x.PopulateAsync(
+                It.IsAny<OpenIddictApplicationDescriptor>(), application, It.IsAny<CancellationToken>()))
+            .Callback<OpenIddictApplicationDescriptor, object, CancellationToken>((descriptor, _, _) =>
+            {
+                descriptor.ClientSecret = string.Empty;
+            })
+            .Returns(ValueTask.CompletedTask);
+        manager.Setup(x => x.UpdateAsync(
+                application, It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()))
+            .Callback<object, OpenIddictApplicationDescriptor, CancellationToken>((_, descriptor, _) =>
+                capture.Descriptor = descriptor)
+            .Returns(ValueTask.CompletedTask);
+
+        var getResult = await CreateController(manager).Get("app-1");
+        var getApi = getResult.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        var detail = getApi.Data!;
+        var clientType = detail.GetType().GetProperty("clientType")!.GetValue(detail).Should().BeOfType<string>().Subject;
+        clientType.Should().Be("public");
+
+        var input = ValidUpdateInput();
+        input.ClientType = clientType;
+        var updateResult = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(updateResult);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.ClientType.Should().Be("public");
+        capture.Descriptor.ClientSecret.Should().BeNull();
+        capture.Descriptor.Requirements.Should().Contain(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
+    }
+
+    [Fact]
     public async Task Get_NonAdminReturnsUnauthorizedWithoutLoadingApplication()
     {
         var manager = new Mock<IOpenIddictApplicationManager>();
@@ -122,6 +284,106 @@ public class ApplicationsControllerTests
         api.Code.Should().Be(Errors.InvalidRequest.Code);
         api.Message.Should().Be("authorization_code grant 必须设置 RedirectUris");
         manager.Verify(x => x.FindByClientIdAsync("client-1", It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_PublicClientWithSecretReturnsValidationError()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            ClientSecret = "secret"
+        };
+
+        var result = await CreateController(manager).Create(input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("public 客户端不能设置 ClientSecret");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_PublicClientBuildsDescriptorWithPkceAndNoSecret()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        OpenIddictApplicationDescriptor? captured = null;
+        manager.Setup(x => x.FindByClientIdAsync("client-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((object?)null);
+        manager.Setup(x => x.CreateAsync(
+                It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()))
+            .Callback<OpenIddictApplicationDescriptor, CancellationToken>((descriptor, _) => captured = descriptor)
+            .Returns(new ValueTask<object>("app-1"));
+
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            RequirePkce = false,
+            GrantTypes = ["refresh_token"],
+            Scopes = ["openid"]
+        });
+
+        AssertSuccess(result);
+        captured.Should().NotBeNull();
+        captured!.ClientType.Should().Be("public");
+        captured.ClientSecret.Should().BeNull();
+        captured.Requirements.Should().BeEquivalentTo(new[]
+        {
+            OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange
+        });
+        captured.Permissions.Should().Contain("gt:refresh_token");
+        captured.Permissions.Should().Contain("scp:openid");
+    }
+
+    [Fact]
+    public async Task Create_InvalidJwksReturnsValidationErrorInsteadOfThrowing()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "confidential",
+            ClientSecret = "secret",
+            JsonWebKeySet = "{invalid"
+        };
+
+        var result = await CreateController(manager).Create(input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("JsonWebKeySet 格式不合法");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), "AccessTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), "AuthorizationCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), "RefreshTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), "IdentityTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), "DeviceCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.UserCodeLifetime), "UserCodeLifetime 必须大于 0")]
+    public async Task Create_NonPositiveLifetimeReturnsValidationError(string propertyName, string message)
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public"
+        };
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, 0);
+
+        var result = await CreateController(manager).Create(input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be(message);
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -272,6 +534,39 @@ public class ApplicationsControllerTests
         descriptor.Settings[OpenIddictConstants.Settings.TokenLifetimes.UserCode].Should().Be("00:06:06");
     }
 
+    [Fact]
+    public async Task Update_WhenLifetimesAreOmittedPreservesAllExistingLifetimes()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
+                descriptor.SetAccessTokenLifetime(TimeSpan.FromSeconds(61));
+                descriptor.SetAuthorizationCodeLifetime(TimeSpan.FromSeconds(302));
+                descriptor.SetRefreshTokenLifetime(TimeSpan.FromSeconds(3603));
+                descriptor.SetIdentityTokenLifetime(TimeSpan.FromSeconds(3604));
+                descriptor.SetDeviceCodeLifetime(TimeSpan.FromSeconds(365));
+                descriptor.SetUserCodeLifetime(TimeSpan.FromSeconds(366));
+            });
+
+        var result = await CreateController(manager).Update("app-1", ValidUpdateInput());
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        var settings = capture.Descriptor!.Settings;
+        settings[OpenIddictConstants.Settings.TokenLifetimes.AccessToken].Should().Be("00:01:01");
+        settings[OpenIddictConstants.Settings.TokenLifetimes.AuthorizationCode].Should().Be("00:05:02");
+        settings[OpenIddictConstants.Settings.TokenLifetimes.RefreshToken].Should().Be("01:00:03");
+        settings[OpenIddictConstants.Settings.TokenLifetimes.IdentityToken].Should().Be("01:00:04");
+        settings[OpenIddictConstants.Settings.TokenLifetimes.DeviceCode].Should().Be("00:06:05");
+        settings[OpenIddictConstants.Settings.TokenLifetimes.UserCode].Should().Be("00:06:06");
+        capture.Descriptor.Requirements.Should().BeEmpty();
+    }
+
     private static ApplicationsController CreateController(
         Mock<IOpenIddictApplicationManager> manager, string userName = "admin")
     {
@@ -285,6 +580,12 @@ public class ApplicationsControllerTests
             }
         };
         return controller;
+    }
+
+    private static async IAsyncEnumerable<object> SingleApplication(object application)
+    {
+        await Task.CompletedTask;
+        yield return application;
     }
 
     private static (Mock<IOpenIddictApplicationManager> Manager, DescriptorCapture Capture) CreateUpdateManager(

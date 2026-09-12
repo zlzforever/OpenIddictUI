@@ -28,7 +28,11 @@ public class ApplicationsController(
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        if (!IsAdmin())
+        {
+            return Unauthorized(Errors.NotAuthenticated);
+        }
+
         var apps = new List<object>();
         await foreach (var app in applicationManager.ListAsync())
         {
@@ -39,7 +43,7 @@ public class ApplicationsController(
                 id = await applicationManager.GetIdAsync(app),
                 clientId = await applicationManager.GetClientIdAsync(app),
                 displayName = await applicationManager.GetDisplayNameAsync(app),
-                clientType = await applicationManager.GetClientTypeAsync(app) ?? "confidential",
+                clientType = await applicationManager.GetClientTypeAsync(app) ?? "public",
                 applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
@@ -80,7 +84,7 @@ public class ApplicationsController(
                 id = await applicationManager.GetIdAsync(app),
                 clientId = await applicationManager.GetClientIdAsync(app),
                 displayName = await applicationManager.GetDisplayNameAsync(app),
-                clientType = await applicationManager.GetClientTypeAsync(app) ?? "confidential",
+                clientType = await applicationManager.GetClientTypeAsync(app) ?? "public",
                 applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
@@ -104,11 +108,21 @@ public class ApplicationsController(
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ApplicationInput input)
     {
-        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        if (!IsAdmin())
+        {
+            return Unauthorized(Errors.NotAuthenticated);
+        }
+
         var err = ValidateApplicationInput(input, isUpdate: false);
-        if (err != null) return Ok(err);
+        if (err != null)
+        {
+            return Ok(err);
+        }
+
         if (await applicationManager.FindByClientIdAsync(input.ClientId) != null)
+        {
             return Ok(Errors.InvalidRequest);
+        }
 
         await applicationManager.CreateAsync(BuildDescriptor(input), CancellationToken.None);
         return Ok(ApiResult.Ok("创建成功"));
@@ -117,7 +131,11 @@ public class ApplicationsController(
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
     {
-        if (!IsAdmin()) return Unauthorized(Errors.NotAuthenticated);
+        if (!IsAdmin())
+        {
+            return Unauthorized(Errors.NotAuthenticated);
+        }
+
         var err = ValidateApplicationInput(input, isUpdate: true, validateExistingClientType: false);
         if (err != null)
         {
@@ -125,7 +143,10 @@ public class ApplicationsController(
         }
 
         var app = await applicationManager.FindByIdAsync(id);
-        if (app == null) return Ok(Errors.UserNotExistResult);
+        if (app == null)
+        {
+            return Ok(Errors.UserNotExistResult);
+        }
 
         err = ValidateApplicationInput(
             input,
@@ -155,7 +176,21 @@ public class ApplicationsController(
 
         if (string.Equals(clientType, "public", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(input.ClientSecret))
+        {
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.JsonWebKeySet))
+        {
+            try
+            {
+                _ = new JsonWebKeySet(input.JsonWebKeySet);
+            }
+            catch (ArgumentException)
+            {
+                return err(Errors.InvalidRequest.Code, "JsonWebKeySet 格式不合法");
+            }
+        }
 
         var normalizedExistingClientType = existingClientType ?? "public";
         var requiresNewCredentials = !isUpdate ||
@@ -164,19 +199,45 @@ public class ApplicationsController(
         if (string.Equals(clientType, "confidential", StringComparison.OrdinalIgnoreCase) &&
             requiresNewCredentials && string.IsNullOrWhiteSpace(input.ClientSecret) &&
             string.IsNullOrWhiteSpace(input.JsonWebKeySet))
+        {
             return err(Errors.InvalidRequest.Code, "confidential 客户端必须设置 ClientSecret 或 JWKS");
+        }
 
         if (input.GrantTypes?.Contains("authorization_code") == true &&
             (input.RedirectUris == null || input.RedirectUris.Count == 0))
+        {
             return err(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
+        }
 
-        if (input.AccessTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "AccessTokenLifetime 必须大于 0");
+        if (input.AccessTokenLifetime is <= 0)
+        {
+            return err(Errors.InvalidRequest.Code, "AccessTokenLifetime 必须大于 0");
+        }
+
         if (input.AuthorizationCodeLifetime is <= 0)
+        {
             return err(Errors.InvalidRequest.Code, "AuthorizationCodeLifetime 必须大于 0");
-        if (input.RefreshTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "RefreshTokenLifetime 必须大于 0");
-        if (input.IdentityTokenLifetime is <= 0) return err(Errors.InvalidRequest.Code, "IdentityTokenLifetime 必须大于 0");
-        if (input.DeviceCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "DeviceCodeLifetime 必须大于 0");
-        if (input.UserCodeLifetime is <= 0) return err(Errors.InvalidRequest.Code, "UserCodeLifetime 必须大于 0");
+        }
+
+        if (input.RefreshTokenLifetime is <= 0)
+        {
+            return err(Errors.InvalidRequest.Code, "RefreshTokenLifetime 必须大于 0");
+        }
+
+        if (input.IdentityTokenLifetime is <= 0)
+        {
+            return err(Errors.InvalidRequest.Code, "IdentityTokenLifetime 必须大于 0");
+        }
+
+        if (input.DeviceCodeLifetime is <= 0)
+        {
+            return err(Errors.InvalidRequest.Code, "DeviceCodeLifetime 必须大于 0");
+        }
+
+        if (input.UserCodeLifetime is <= 0)
+        {
+            return err(Errors.InvalidRequest.Code, "UserCodeLifetime 必须大于 0");
+        }
 
         return null;
     }
@@ -209,9 +270,17 @@ public class ApplicationsController(
         }
 
         descriptor.Settings.Remove("client_url");
-        if (!string.IsNullOrEmpty(input.ClientUrl)) descriptor.Settings["client_url"] = input.ClientUrl;
+        if (!string.IsNullOrEmpty(input.ClientUrl))
+        {
+            descriptor.Settings["client_url"] = input.ClientUrl;
+        }
+
         descriptor.Settings.Remove("client_logo_url");
-        if (!string.IsNullOrEmpty(input.ClientLogoUrl)) descriptor.Settings["client_logo_url"] = input.ClientLogoUrl;
+        if (!string.IsNullOrEmpty(input.ClientLogoUrl))
+        {
+            descriptor.Settings["client_logo_url"] = input.ClientLogoUrl;
+        }
+
         descriptor.Settings["enabled"] = input.Enabled ? "true" : "false";
 
         var preservedPermissions = descriptor.Permissions
@@ -219,25 +288,39 @@ public class ApplicationsController(
             .ToList();
         descriptor.Permissions.Clear();
         foreach (var permission in preservedPermissions)
+        {
             descriptor.Permissions.Add(permission);
+        }
 
         descriptor.RedirectUris.Clear();
-        foreach (var u in input.RedirectUris ?? []) descriptor.RedirectUris.Add(new Uri(u));
+        foreach (var u in input.RedirectUris ?? [])
+        {
+            descriptor.RedirectUris.Add(new Uri(u));
+        }
 
         descriptor.PostLogoutRedirectUris.Clear();
-        foreach (var u in input.PostLogoutRedirectUris ?? []) descriptor.PostLogoutRedirectUris.Add(new Uri(u));
+        foreach (var u in input.PostLogoutRedirectUris ?? [])
+        {
+            descriptor.PostLogoutRedirectUris.Add(new Uri(u));
+        }
 
         // grant types → permissions
         foreach (var gt in input.GrantTypes ?? [])
+        {
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.GrantType + gt);
+        }
 
         // authorization_code → need response_type=code
         if (input.GrantTypes?.Contains("authorization_code") ?? false)
+        {
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+        }
 
         // scopes
         foreach (var sc in input.Scopes ?? [])
+        {
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + sc);
+        }
 
         // 有 redirect_uri → add endpoint permissions
         if (input.RedirectUris is { Count: > 0 })
@@ -247,20 +330,47 @@ public class ApplicationsController(
         }
 
         if (input.PostLogoutRedirectUris is { Count: > 0 })
+        {
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
+        }
 
         // public 客户端强制 PKCE
         descriptor.Requirements.Clear();
         if (isPublic || input.RequirePkce)
+        {
             descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
+        }
 
         // Token lifetimes (seconds → TimeSpan)
-        descriptor.SetAccessTokenLifetime(ToTimeSpan(input.AccessTokenLifetime));
-        descriptor.SetAuthorizationCodeLifetime(ToTimeSpan(input.AuthorizationCodeLifetime));
-        descriptor.SetRefreshTokenLifetime(ToTimeSpan(input.RefreshTokenLifetime));
-        descriptor.SetIdentityTokenLifetime(ToTimeSpan(input.IdentityTokenLifetime));
-        descriptor.SetDeviceCodeLifetime(ToTimeSpan(input.DeviceCodeLifetime));
-        descriptor.SetUserCodeLifetime(ToTimeSpan(input.UserCodeLifetime));
+        if (input.AccessTokenLifetime.HasValue)
+        {
+            descriptor.SetAccessTokenLifetime(ToTimeSpan(input.AccessTokenLifetime));
+        }
+
+        if (input.AuthorizationCodeLifetime.HasValue)
+        {
+            descriptor.SetAuthorizationCodeLifetime(ToTimeSpan(input.AuthorizationCodeLifetime));
+        }
+
+        if (input.RefreshTokenLifetime.HasValue)
+        {
+            descriptor.SetRefreshTokenLifetime(ToTimeSpan(input.RefreshTokenLifetime));
+        }
+
+        if (input.IdentityTokenLifetime.HasValue)
+        {
+            descriptor.SetIdentityTokenLifetime(ToTimeSpan(input.IdentityTokenLifetime));
+        }
+
+        if (input.DeviceCodeLifetime.HasValue)
+        {
+            descriptor.SetDeviceCodeLifetime(ToTimeSpan(input.DeviceCodeLifetime));
+        }
+
+        if (input.UserCodeLifetime.HasValue)
+        {
+            descriptor.SetUserCodeLifetime(ToTimeSpan(input.UserCodeLifetime));
+        }
 
         return descriptor;
     }
@@ -272,7 +382,9 @@ public class ApplicationsController(
     {
         if (!settings.TryGetValue(key, out var value) ||
             !TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var lifetime))
+        {
             return null;
+        }
 
         return (int)lifetime.TotalSeconds;
     }
