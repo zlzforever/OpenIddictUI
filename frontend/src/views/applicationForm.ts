@@ -230,6 +230,8 @@ export function buildApplicationPayload(
   if (editing) {
     if (clientSecret) body.clientSecret = form.clientSecret
     if (jsonWebKeySet) body.jsonWebKeySet = form.jsonWebKeySet
+    if (!form.clientUrl.trim()) delete body.clientUrl
+    if (!form.clientLogoUrl.trim()) delete body.clientLogoUrl
   } else {
     body.clientSecret = clientSecret || null
     body.jsonWebKeySet = jsonWebKeySet || null

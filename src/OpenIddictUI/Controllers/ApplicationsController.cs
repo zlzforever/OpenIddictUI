@@ -209,6 +209,18 @@ public class ApplicationsController(
             return err(Errors.InvalidRequest.Code, "authorization_code grant 必须设置 RedirectUris");
         }
 
+        var redirectUriError = ValidateUriList(input.RedirectUris, "RedirectUri");
+        if (redirectUriError != null)
+        {
+            return redirectUriError;
+        }
+
+        var postLogoutRedirectUriError = ValidateUriList(input.PostLogoutRedirectUris, "PostLogoutRedirectUri");
+        if (postLogoutRedirectUriError != null)
+        {
+            return postLogoutRedirectUriError;
+        }
+
         if (input.AccessTokenLifetime is <= 0)
         {
             return err(Errors.InvalidRequest.Code, "AccessTokenLifetime 必须大于 0");
@@ -269,14 +281,12 @@ public class ApplicationsController(
                 : new JsonWebKeySet(input.JsonWebKeySet);
         }
 
-        descriptor.Settings.Remove("client_url");
-        if (!string.IsNullOrEmpty(input.ClientUrl))
+        if (!string.IsNullOrWhiteSpace(input.ClientUrl))
         {
             descriptor.Settings["client_url"] = input.ClientUrl;
         }
 
-        descriptor.Settings.Remove("client_logo_url");
-        if (!string.IsNullOrEmpty(input.ClientLogoUrl))
+        if (!string.IsNullOrWhiteSpace(input.ClientLogoUrl))
         {
             descriptor.Settings["client_logo_url"] = input.ClientLogoUrl;
         }
@@ -284,7 +294,7 @@ public class ApplicationsController(
         descriptor.Settings["enabled"] = input.Enabled ? "true" : "false";
 
         var preservedPermissions = descriptor.Permissions
-            .Where(p => !p.StartsWith("scp:") && !p.StartsWith("gt:"))
+            .Where(p => !IsDerivedPermission(p))
             .ToList();
         descriptor.Permissions.Clear();
         foreach (var permission in preservedPermissions)
@@ -295,13 +305,13 @@ public class ApplicationsController(
         descriptor.RedirectUris.Clear();
         foreach (var u in input.RedirectUris ?? [])
         {
-            descriptor.RedirectUris.Add(new Uri(u));
+            descriptor.RedirectUris.Add(new Uri(u, UriKind.Absolute));
         }
 
         descriptor.PostLogoutRedirectUris.Clear();
         foreach (var u in input.PostLogoutRedirectUris ?? [])
         {
-            descriptor.PostLogoutRedirectUris.Add(new Uri(u));
+            descriptor.PostLogoutRedirectUris.Add(new Uri(u, UriKind.Absolute));
         }
 
         // grant types → permissions
@@ -377,6 +387,27 @@ public class ApplicationsController(
 
     private static TimeSpan? ToTimeSpan(int? seconds)
         => seconds.HasValue ? TimeSpan.FromSeconds(seconds.Value) : null;
+
+    private static ApiResult? ValidateUriList(IEnumerable<string>? uris, string propertyName)
+    {
+        foreach (var uri in uris ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(uri) || !Uri.TryCreate(uri, UriKind.Absolute, out _))
+            {
+                return ApiResult.Error(Errors.InvalidRequest.Code, $"{propertyName} 必须是合法的绝对 URI");
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDerivedPermission(string permission)
+        => permission.StartsWith("scp:", StringComparison.Ordinal) ||
+           permission.StartsWith("gt:", StringComparison.Ordinal) ||
+           permission == OpenIddictConstants.Permissions.ResponseTypes.Code ||
+           permission == OpenIddictConstants.Permissions.Endpoints.Authorization ||
+           permission == OpenIddictConstants.Permissions.Endpoints.Token ||
+           permission == OpenIddictConstants.Permissions.Endpoints.EndSession;
 
     private static int? GetLifetimeSeconds(IReadOnlyDictionary<string, string> settings, string key)
     {

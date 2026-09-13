@@ -360,14 +360,98 @@ public class ApplicationsControllerTests
         manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task Create_InvalidRedirectUriReturnsValidationErrorInsteadOfThrowing()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            RedirectUris = ["not-an-absolute-uri"]
+        });
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("RedirectUri 必须是合法的绝对 URI");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_InvalidPostLogoutRedirectUriReturnsValidationErrorInsteadOfThrowing()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            PostLogoutRedirectUris = ["not-an-absolute-uri"]
+        });
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("PostLogoutRedirectUri 必须是合法的绝对 URI");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_InvalidRedirectUriReturnsValidationErrorInsteadOfThrowing()
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        var input = ValidUpdateInput();
+        input.ClientType = "public";
+        input.RedirectUris = ["not-an-absolute-uri"];
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("RedirectUri 必须是合法的绝对 URI");
+        manager.Verify(x => x.PopulateAsync(
+            It.IsAny<OpenIddictApplicationDescriptor>(), application, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_InvalidPostLogoutRedirectUriReturnsValidationErrorInsteadOfThrowing()
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        var input = ValidUpdateInput();
+        input.ClientType = "public";
+        input.PostLogoutRedirectUris = ["not-an-absolute-uri"];
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("PostLogoutRedirectUri 必须是合法的绝对 URI");
+        manager.Verify(x => x.PopulateAsync(
+            It.IsAny<OpenIddictApplicationDescriptor>(), application, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
-    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), "AccessTokenLifetime 必须大于 0")]
-    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), "AuthorizationCodeLifetime 必须大于 0")]
-    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), "RefreshTokenLifetime 必须大于 0")]
-    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), "IdentityTokenLifetime 必须大于 0")]
-    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), "DeviceCodeLifetime 必须大于 0")]
-    [InlineData(nameof(ApplicationInput.UserCodeLifetime), "UserCodeLifetime 必须大于 0")]
-    public async Task Create_NonPositiveLifetimeReturnsValidationError(string propertyName, string message)
+    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), 0, "AccessTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), 0, "AuthorizationCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), 0, "RefreshTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), 0, "IdentityTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), 0, "DeviceCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.UserCodeLifetime), 0, "UserCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), -1, "AccessTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), -1, "AuthorizationCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), -1, "RefreshTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), -1, "IdentityTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), -1, "DeviceCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.UserCodeLifetime), -1, "UserCodeLifetime 必须大于 0")]
+    public async Task Create_NonPositiveLifetimeReturnsValidationError(string propertyName, int value, string message)
     {
         var manager = new Mock<IOpenIddictApplicationManager>();
         var input = new ApplicationInput
@@ -375,7 +459,7 @@ public class ApplicationsControllerTests
             ClientId = "client-1",
             ClientType = "public"
         };
-        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, 0);
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, value);
 
         var result = await CreateController(manager).Create(input);
 
@@ -565,6 +649,174 @@ public class ApplicationsControllerTests
         settings[OpenIddictConstants.Settings.TokenLifetimes.DeviceCode].Should().Be("00:06:05");
         settings[OpenIddictConstants.Settings.TokenLifetimes.UserCode].Should().Be("00:06:06");
         capture.Descriptor.Requirements.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Update_RemovingAuthorizationCodeDropsDerivedResponsePermission()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Permissions.Add("aud:existing-api");
+                descriptor.Permissions.Add("gt:authorization_code");
+                descriptor.Permissions.Add("scp:old");
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
+            });
+        var input = ValidUpdateInput();
+        input.RedirectUris = ["https://new.example/callback"];
+        input.PostLogoutRedirectUris = [];
+        input.GrantTypes = ["refresh_token"];
+        input.Scopes = ["api"];
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.Permissions.Should().BeEquivalentTo(new[]
+        {
+            "aud:existing-api",
+            "gt:refresh_token",
+            "scp:api",
+            OpenIddictConstants.Permissions.Endpoints.Authorization,
+            OpenIddictConstants.Permissions.Endpoints.Token
+        });
+    }
+
+    [Fact]
+    public async Task Update_WhenUrisAreClearedDropsAllDerivedPermissions()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Permissions.Add("aud:existing-api");
+                descriptor.Permissions.Add("gt:authorization_code");
+                descriptor.Permissions.Add("scp:old");
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
+            });
+        var input = ValidUpdateInput();
+        input.RedirectUris = [];
+        input.PostLogoutRedirectUris = [];
+        input.GrantTypes = [];
+        input.Scopes = [];
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.Permissions.Should().BeEquivalentTo(new[] { "aud:existing-api" });
+    }
+
+    [Fact]
+    public async Task Update_InvalidJwksReturnsValidationErrorBeforeLoadingApplication()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = ValidUpdateInput();
+        input.JsonWebKeySet = "{invalid";
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("JsonWebKeySet 格式不合法");
+        manager.Verify(x => x.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_UnknownIdReturnsUserNotExistResult()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((object?)null);
+
+        var result = await CreateController(manager).Update("missing", ValidUpdateInput());
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.UserNotExist);
+        api.Message.Should().Be("用户不存在");
+        manager.Verify(x => x.PopulateAsync(
+            It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_EmptyDisplayUrlsPreserveExistingSettings()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Settings["client_url"] = "https://old.example";
+                descriptor.Settings["client_logo_url"] = "https://old.example/logo.png";
+            });
+
+        var result = await CreateController(manager).Update("app-1", ValidUpdateInput());
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.Settings["client_url"].Should().Be("https://old.example");
+        capture.Descriptor.Settings["client_logo_url"].Should().Be("https://old.example/logo.png");
+    }
+
+    [Fact]
+    public async Task Update_ProvidedDisplayUrlsOverrideExistingSettings()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor =>
+            {
+                descriptor.Settings["client_url"] = "https://old.example";
+                descriptor.Settings["client_logo_url"] = "https://old.example/logo.png";
+            });
+        var input = ValidUpdateInput();
+        input.ClientUrl = "https://new.example";
+        input.ClientLogoUrl = "https://new.example/logo.png";
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.Settings["client_url"].Should().Be("https://new.example");
+        capture.Descriptor.Settings["client_logo_url"].Should().Be("https://new.example/logo.png");
+    }
+
+    [Fact]
+    public async Task Update_EnabledFalsePersistsDisabledSetting()
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret",
+            configureExisting: descriptor => descriptor.Settings["enabled"] = "true");
+        var input = ValidUpdateInput();
+        input.Enabled = false;
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.Settings["enabled"].Should().Be("false");
     }
 
     private static ApplicationsController CreateController(

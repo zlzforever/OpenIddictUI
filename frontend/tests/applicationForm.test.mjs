@@ -51,6 +51,17 @@ test('edit validation allows omitted secret and JWKS', async () => {
   assert.equal(validateApplicationForm(baseForm(), true), null)
 })
 
+test('authorization_code validation requires a non-empty redirect URI', async () => {
+  const { validateApplicationForm } = await loadFormModule()
+  const form = baseForm()
+  form.clientType = 'public'
+  form.selectedGrantTypes = ['authorization_code']
+
+  assert.equal(validateApplicationForm(form, false), 'authCodeRequiresRedirectUri')
+  form.redirectUrisText = 'https://client.example/callback'
+  assert.equal(validateApplicationForm(form, false), null)
+})
+
 test('edit payload omits unchanged credentials but sends explicitly entered values', async () => {
   const { buildApplicationPayload } = await loadFormModule()
   const form = baseForm()
@@ -64,6 +75,15 @@ test('edit payload omits unchanged credentials but sends explicitly entered valu
   const changed = buildApplicationPayload(form, true)
   assert.equal(changed.clientSecret, 'new-secret')
   assert.equal(changed.jsonWebKeySet, '{"keys":[{"kid":"new"}]}')
+})
+
+test('edit payload omits empty display URLs so existing settings are preserved', async () => {
+  const { buildApplicationPayload } = await loadFormModule()
+
+  const payload = buildApplicationPayload(baseForm(), true)
+
+  assert.equal(Object.hasOwn(payload, 'clientUrl'), false)
+  assert.equal(Object.hasOwn(payload, 'clientLogoUrl'), false)
 })
 
 test('detail mapping uses detail values even when the list row is incomplete', async () => {
@@ -119,6 +139,21 @@ test('detail loading returns no form when the request fails', async () => {
   const missing = await loadApplicationForm('app-1', async () => ({ code: 200 }))
   assert.equal(failed, null)
   assert.equal(missing, null)
+})
+
+test('edit loads full detail using the id from an incomplete list row', async () => {
+  const { createApplicationEditController } = await loadFormModule()
+  let requestedId = ''
+  let state
+  const controller = createApplicationEditController(async id => {
+    requestedId = id
+    return { code: 200, data: detail(id) }
+  }, nextState => { state = nextState })
+
+  assert.equal(await controller.openEdit('app-only-id'), 'loaded')
+  assert.equal(requestedId, 'app-only-id')
+  assert.equal(state.editId, 'app-only-id')
+  assert.equal(state.form.clientId, 'app-only-id')
 })
 
 function deferred() {
