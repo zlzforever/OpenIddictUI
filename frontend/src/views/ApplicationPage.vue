@@ -14,7 +14,7 @@
         <div class="app-card-info">
           <span class="app-card-meta">{{ a.clientId }}</span>
           <span class="app-card-meta">· {{ a.applicationType||'web' }}</span>
-          <span class="app-card-meta">· {{ a.clientType }}</span>
+          <span class="app-card-meta">· {{ a.clientType || 'public' }}</span>
           <span class="app-card-meta" v-if="a.clientUrl">· {{ a.clientUrl }}</span>
         </div>
         <div class="app-card-tags" v-if="(a.grantTypes||[]).length">
@@ -33,7 +33,7 @@
     </div>
     <p v-else style="color:var(--text-muted)">{{ $t('applications.noData') }}</p>
 
-    <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="showModal=$event"
+    <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="updateModalVisibility"
       preset="card" style="width:740px;min-height:620px" :mask-closable="false">
       <n-form label-placement="top" size="small">
         <n-tabs type="segment" animated style="min-height:520px">
@@ -47,6 +47,9 @@
               <n-form-item-gi :label="$t('applications.clientSecret')">
                 <n-input v-model:value="form.clientSecret" type="password"
                   :disabled="form.clientType==='public'" :placeholder="form.clientType==='public'?$t('applications.noSecretForPublic'):$t('applications.leaveBlank')"/>
+              </n-form-item-gi>
+              <n-form-item-gi v-if="form.clientType==='confidential'" :label="$t('applications.jsonWebKeySet')">
+                <n-input v-model:value="form.jsonWebKeySet" type="textarea" :rows="3"/>
               </n-form-item-gi>
               <n-form-item-gi :label="$t('applications.requirePkce')"><n-switch v-model:value="form.requirePkce"/></n-form-item-gi>
               <n-form-item-gi :label="$t('applications.enabledLabel')"><n-switch v-model:value="form.enabled"/></n-form-item-gi>
@@ -116,7 +119,7 @@
           <span v-if="valMsg" style="color:var(--error);font-size:0.8125rem">{{ valMsg }}</span>
         </div>
         <n-space justify="end">
-          <n-button @click="showModal=false">{{ $t('applications.close') }}</n-button>
+          <n-button @click="closeModal">{{ $t('applications.close') }}</n-button>
           <n-button type="primary" @click="handleSave">{{ $t('applications.save') }}</n-button>
         </n-space>
       </template>
@@ -128,6 +131,16 @@
 import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NTag, NButton, useMessage, NPopconfirm } from 'naive-ui'
+import { getApplication, saveApplication } from '../services/api'
+import {
+  buildApplicationPayload,
+  createApplicationForm,
+  createApplicationEditController,
+  type ApplicationDetail,
+  type ApplicationEditState,
+  type ApplicationForm,
+  validateApplicationForm
+} from './applicationForm'
 
 const { t } = useI18n()
 const api = document.querySelector('base')?.getAttribute('href') || '/'
@@ -137,11 +150,20 @@ const appTypes = [{label:'web',value:'web'},{label:'native',value:'native'},{lab
 const clientTypes = [{label:'public',value:'public'},{label:'confidential',value:'confidential'}]
 const consentTypes = [{label:'implicit',value:'implicit'},{label:'explicit',value:'explicit'}]
 
-interface AppInfo { id:string; clientId:string; displayName?:string; applicationType:string; clientType:string; consentType:string; enabled:string; scopes:string[]; grantTypes:string[]; redirectUris:string[]; postLogoutRedirectUris:string[]; clientUrl?:string; clientLogoUrl?:string }
+interface AppInfo extends ApplicationDetail { applicationType:string; clientType:string; consentType:string; enabled:string; scopes:string[]; grantTypes:string[]; redirectUris:string[]; postLogoutRedirectUris:string[] }
 interface ScopeOpt { name:string; displayName?:string }
 const apps=ref<AppInfo[]>([]); const allScopes=ref<ScopeOpt[]>([]); const availableGrantTypes=ref<string[]>([])
 const showModal=ref(false); const editing=ref(false); const editId=ref(''); const valMsg=ref('')
-const form=ref({ clientId:'',clientSecret:'',displayName:'',applicationType:'web',clientType:'confidential',consentType:'implicit',redirectUrisText:'',postLogoutRedirectUrisText:'',clientUrl:'',clientLogoUrl:'',accessTokenLifetime:null as number|null,authorizationCodeLifetime:null as number|null,refreshTokenLifetime:null as number|null,identityTokenLifetime:null as number|null,deviceCodeLifetime:null as number|null,userCodeLifetime:null as number|null,enabled:true,requirePkce:true,selectedScopes:[] as string[],selectedGrantTypes:[] as string[] })
+const form=ref<ApplicationForm>(createApplicationForm())
+
+function applyEditState(state: ApplicationEditState){
+  form.value=state.form
+  editing.value=state.editing
+  editId.value=state.editId
+  showModal.value=state.showModal
+}
+
+const editController=createApplicationEditController(getApplication, applyEditState)
 
 const scopeOpts = computed(() => allScopes.value.map(s => ({ label: s.displayName||s.name, value: s.name })))
 
@@ -160,18 +182,30 @@ async function loadScopes(){ const r=await fetch(`${api}api/scopes`,{credentials
 async function loadGrantTypes(){ const r=await fetch(`${api}api/applications/grant-types`,{credentials:'include'}); if(r.ok) availableGrantTypes.value=(await r.json()).data||[]; else availableGrantTypes.value=['authorization_code','refresh_token'] }
 onMounted(async ()=>{ await loadApps(); await loadScopes(); await loadGrantTypes() })
 
-function openAdd(){ editing.value=false; editId.value=''; form.value={ clientId:'',clientSecret:'',displayName:'',applicationType:'web',clientType:'confidential',consentType:'implicit',redirectUrisText:'',postLogoutRedirectUrisText:'',clientUrl:'',clientLogoUrl:'',accessTokenLifetime:null,authorizationCodeLifetime:null,refreshTokenLifetime:null,identityTokenLifetime:null,deviceCodeLifetime:null,userCodeLifetime:null,enabled:true,requirePkce:true,selectedScopes:[],selectedGrantTypes:[] }; showModal.value=true }
-function openEdit(a:AppInfo){ editing.value=true; editId.value=a.id; form.value={ clientId:a.clientId,clientSecret:'',displayName:a.displayName||'',applicationType:a.applicationType||'web',clientType:a.clientType,consentType:a.consentType,redirectUrisText:(a.redirectUris||[]).join('\n'),postLogoutRedirectUrisText:(a.postLogoutRedirectUris||[]).join('\n'),clientUrl:a.clientUrl||'',clientLogoUrl:a.clientLogoUrl||'',accessTokenLifetime:null,authorizationCodeLifetime:null,refreshTokenLifetime:null,identityTokenLifetime:null,deviceCodeLifetime:null,userCodeLifetime:null,enabled:a.enabled==='true',requirePkce:true,selectedScopes:[...(a.scopes||[])],selectedGrantTypes:[...(a.grantTypes||[])] }; showModal.value=true }
+function openAdd(){ valMsg.value=''; editController.openAdd() }
+
+function closeModal(){ valMsg.value=''; editController.close() }
+
+function updateModalVisibility(value:boolean){
+  if(value){ showModal.value=true }
+  else { closeModal() }
+}
+
+async function openEdit(a:AppInfo){
+  valMsg.value=''
+  if(await editController.openEdit(a.id)==='failed'){ msg.error(t('applications.loadFailed')) }
+}
 
 async function handleSave(){
   valMsg.value=''
-  if(!form.value.clientId.trim()){ valMsg.value=t('applications.clientIdRequired'); return }
-  if(form.value.clientType==='confidential' && !form.value.clientSecret.trim()){ valMsg.value=t('applications.confidentialSecretRequired'); return }
-  if(form.value.selectedGrantTypes.includes('authorization_code') && !form.value.redirectUrisText.trim()){ valMsg.value=t('applications.authCodeRequiresRedirectUri'); return }
-  const body={ clientId:form.value.clientId,clientSecret:form.value.clientSecret||null,displayName:form.value.displayName,applicationType:form.value.applicationType,clientType:form.value.clientType,consentType:form.value.consentType,redirectUris:form.value.redirectUrisText.split('\n').filter(s=>s.trim()),postLogoutRedirectUris:form.value.postLogoutRedirectUrisText.split('\n').filter(s=>s.trim()),clientUrl:form.value.clientUrl||null,clientLogoUrl:form.value.clientLogoUrl||null,accessTokenLifetime:form.value.accessTokenLifetime,authorizationCodeLifetime:form.value.authorizationCodeLifetime,refreshTokenLifetime:form.value.refreshTokenLifetime,identityTokenLifetime:form.value.identityTokenLifetime,deviceCodeLifetime:form.value.deviceCodeLifetime,userCodeLifetime:form.value.userCodeLifetime,scopes:form.value.selectedScopes,grantTypes:form.value.selectedGrantTypes,enabled:form.value.enabled,requirePkce:form.value.requirePkce }
-  const url=editing.value?`${api}api/applications/${editId.value}`:`${api}api/applications`
-  const r=await fetch(url,{method:editing.value?'PUT':'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-  const d=await r.json(); if(d.code===200){ showModal.value=false; await loadApps(); msg.success(t('applications.saveSuccess')) } else msg.error(d.message||t('applications.saveFailed'))
+  const validation=validateApplicationForm(form.value,editing.value)
+  if(validation){ valMsg.value=t(`applications.${validation}`); return }
+  const d=await saveApplication(buildApplicationPayload(form.value,editing.value),editing.value?editId.value:undefined)
+  if(d.code===200){
+    editController.close(); await loadApps(); msg.success(t('applications.saveSuccess'))
+  } else {
+    msg.error(d.message||t('applications.saveFailed'))
+  }
 }
 
 async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${a.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadApps(); msg.success(t('applications.deleteSuccess')) } else msg.error(d.message||t('applications.deleteFailed')) }

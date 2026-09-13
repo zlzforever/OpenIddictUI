@@ -3,6 +3,7 @@
  * 使用相对路径（不带 /），由 <base href> 自动处理网关下级目录
  */
 import { apiPost, apiGet, apiPut, apiDelete } from '../composables/useFetch'
+import type { ApplicationDetail } from '../views/applicationForm'
 
 export async function login(body: Record<string, unknown>) {
   return apiPost('account/login', body, _captchaId) as Promise<{ code: number; message?: string; data?: { location?: string } }>
@@ -63,6 +64,14 @@ export async function submitConsent(id: string, body: Record<string, unknown>) {
 // ---- Admin: Applications & Scopes ----
 export async function getApplications() {
   return apiGet('api/applications') as Promise<{ data: unknown[] }>
+}
+
+export async function getApplication(id: string) {
+  return apiGet(`api/applications/${encodeURIComponent(id)}`) as Promise<{
+    code: number
+    message?: string
+    data?: ApplicationDetail
+  }>
 }
 
 export async function saveApplication(body: Record<string, unknown>, id?: string) {
