@@ -38,12 +38,19 @@ public class ApplicationsController(
         {
             var perms = (await applicationManager.GetPermissionsAsync(app)).ToList();
             var settings = await applicationManager.GetSettingsAsync(app);
+            if (!TryNormalizeClientType(
+                    await applicationManager.GetClientTypeAsync(app), out var clientType))
+            {
+                return Ok(ApiResult.Error(Errors.InvalidRequest.Code,
+                    "ClientType 必须是 public 或 confidential"));
+            }
+
             apps.Add(new
             {
                 id = await applicationManager.GetIdAsync(app),
                 clientId = await applicationManager.GetClientIdAsync(app),
                 displayName = await applicationManager.GetDisplayNameAsync(app),
-                clientType = await applicationManager.GetClientTypeAsync(app) ?? "public",
+                clientType,
                 applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
@@ -76,6 +83,12 @@ public class ApplicationsController(
         var permissions = (await applicationManager.GetPermissionsAsync(app)).ToList();
         var requirements = await applicationManager.GetRequirementsAsync(app);
         var settings = await applicationManager.GetSettingsAsync(app);
+        if (!TryNormalizeClientType(
+                await applicationManager.GetClientTypeAsync(app), out var clientType))
+        {
+            return Ok(ApiResult.Error(Errors.InvalidRequest.Code,
+                "ClientType 必须是 public 或 confidential"));
+        }
 
         return Ok(new ApiResult
         {
@@ -84,7 +97,7 @@ public class ApplicationsController(
                 id = await applicationManager.GetIdAsync(app),
                 clientId = await applicationManager.GetClientIdAsync(app),
                 displayName = await applicationManager.GetDisplayNameAsync(app),
-                clientType = await applicationManager.GetClientTypeAsync(app) ?? "public",
+                clientType,
                 applicationType = await applicationManager.GetApplicationTypeAsync(app) ?? "web",
                 consentType = await applicationManager.GetConsentTypeAsync(app) ?? "implicit",
                 redirectUris = await applicationManager.GetRedirectUrisAsync(app),
@@ -106,11 +119,21 @@ public class ApplicationsController(
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] ApplicationInput input)
+    public async Task<IActionResult> Create([FromBody] ApplicationInput? input)
     {
         if (!IsAdmin())
         {
             return Unauthorized(Errors.NotAuthenticated);
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return Ok(ApiResult.Error(400, GetModelErrors()));
+        }
+
+        if (input is null)
+        {
+            return Ok(ApiResult.Error(400, "请求体不能为空"));
         }
 
         var err = ValidateApplicationInput(input, isUpdate: false);
@@ -129,11 +152,21 @@ public class ApplicationsController(
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput input)
+    public async Task<IActionResult> Update(string id, [FromBody] ApplicationInput? input)
     {
         if (!IsAdmin())
         {
             return Unauthorized(Errors.NotAuthenticated);
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return Ok(ApiResult.Error(400, GetModelErrors()));
+        }
+
+        if (input is null)
+        {
+            return Ok(ApiResult.Error(400, "请求体不能为空"));
         }
 
         var err = ValidateApplicationInput(input, isUpdate: true, validateExistingClientType: false);
@@ -172,7 +205,12 @@ public class ApplicationsController(
         bool validateExistingClientType = true)
     {
         var err = (int code, string msg) => ApiResult.Error(code, msg);
-        var clientType = input.ClientType ?? "confidential";
+        if (!TryNormalizeClientType(input.ClientType, out var clientType))
+        {
+            return err(Errors.InvalidRequest.Code, "ClientType 必须是 public 或 confidential");
+        }
+
+        input.ClientType = clientType;
 
         if (string.Equals(clientType, "public", StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(input.ClientSecret))
@@ -192,7 +230,13 @@ public class ApplicationsController(
             }
         }
 
-        var normalizedExistingClientType = existingClientType ?? "public";
+        var normalizedExistingClientType = "public";
+        if (existingClientType is not null &&
+            !TryNormalizeClientType(existingClientType, out normalizedExistingClientType))
+        {
+            return err(Errors.InvalidRequest.Code, "ClientType 必须是 public 或 confidential");
+        }
+
         var requiresNewCredentials = !isUpdate ||
             (validateExistingClientType &&
              !string.Equals(normalizedExistingClientType, clientType, StringComparison.OrdinalIgnoreCase));
@@ -257,10 +301,11 @@ public class ApplicationsController(
     private static OpenIddictApplicationDescriptor BuildDescriptor(
         ApplicationInput input, OpenIddictApplicationDescriptor? descriptor = null)
     {
-        var isPublic = string.Equals(input.ClientType, "public", StringComparison.OrdinalIgnoreCase);
+        var clientType = input.ClientType ?? "public";
+        var isPublic = clientType == "public";
         descriptor ??= new OpenIddictApplicationDescriptor();
         descriptor.ClientId = input.ClientId;
-        descriptor.ClientType = input.ClientType ?? "confidential";
+        descriptor.ClientType = clientType;
         descriptor.ConsentType = input.ConsentType ?? "implicit";
         descriptor.DisplayName = input.DisplayName;
         descriptor.ApplicationType = input.ApplicationType ?? "web";
@@ -410,6 +455,25 @@ public class ApplicationsController(
            permission == OpenIddictConstants.Permissions.Endpoints.Token ||
            permission == OpenIddictConstants.Permissions.Endpoints.EndSession;
 
+    private static bool TryNormalizeClientType(string? clientType, out string normalizedClientType)
+    {
+        if (clientType is null ||
+            string.Equals(clientType.Trim(), "public", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedClientType = "public";
+            return true;
+        }
+
+        if (string.Equals(clientType.Trim(), "confidential", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedClientType = "confidential";
+            return true;
+        }
+
+        normalizedClientType = string.Empty;
+        return false;
+    }
+
     private static int? GetLifetimeSeconds(IReadOnlyDictionary<string, string> settings, string key)
     {
         if (!settings.TryGetValue(key, out var value) ||
@@ -422,6 +486,14 @@ public class ApplicationsController(
     }
 
     private bool IsAdmin() => User.Identity?.Name == "admin";
+
+    private string GetModelErrors()
+    {
+        var message = string.Join("\n", ModelState.Values
+            .SelectMany(value => value.Errors)
+            .Select(error => error.ErrorMessage));
+        return string.IsNullOrWhiteSpace(message) ? "请求参数不合法" : message;
+    }
 }
 
 public class ApplicationInput

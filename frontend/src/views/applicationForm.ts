@@ -188,7 +188,9 @@ export function validateApplicationForm(
   form: ApplicationForm,
   editing: boolean
 ): ApplicationValidationMessage | null {
-  if (!form.clientId.trim()) return 'clientIdRequired'
+  if (!form.clientId.trim()) {
+    return 'clientIdRequired'
+  }
   if (!editing && form.clientType === 'confidential' &&
       !form.clientSecret.trim() && !form.jsonWebKeySet.trim()) {
     return 'confidentialSecretRequired'
@@ -228,10 +230,18 @@ export function buildApplicationPayload(
   const clientSecret = form.clientSecret.trim()
   const jsonWebKeySet = form.jsonWebKeySet.trim()
   if (editing) {
-    if (clientSecret) body.clientSecret = form.clientSecret
-    if (jsonWebKeySet) body.jsonWebKeySet = form.jsonWebKeySet
-    if (!form.clientUrl.trim()) delete body.clientUrl
-    if (!form.clientLogoUrl.trim()) delete body.clientLogoUrl
+    if (clientSecret) {
+      body.clientSecret = form.clientSecret
+    }
+    if (jsonWebKeySet) {
+      body.jsonWebKeySet = form.jsonWebKeySet
+    }
+    if (!form.clientUrl.trim()) {
+      delete body.clientUrl
+    }
+    if (!form.clientLogoUrl.trim()) {
+      delete body.clientLogoUrl
+    }
   } else {
     body.clientSecret = clientSecret || null
     body.jsonWebKeySet = jsonWebKeySet || null

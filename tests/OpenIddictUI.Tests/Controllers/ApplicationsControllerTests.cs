@@ -71,8 +71,12 @@ public class ApplicationsControllerTests
         manager.Verify(x => x.GetJsonWebKeySetAsync(application, It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task Get_NullClientTypeMapsToPublic()
+    [Theory]
+    [InlineData(null, "public")]
+    [InlineData("PUBLIC", "public")]
+    [InlineData("CONFIDENTIAL", "confidential")]
+    [InlineData("legacy", null)]
+    public async Task Get_ClientTypeIsNormalizedForResponse(string? rawClientType, string? expectedClientType)
     {
         var application = new object();
         var manager = new Mock<IOpenIddictApplicationManager>();
@@ -83,7 +87,7 @@ public class ApplicationsControllerTests
         manager.Setup(x => x.GetDisplayNameAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("Demo");
         manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("web");
         manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync(rawClientType);
         manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>())).ReturnsAsync("implicit");
         manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
             .ReturnsAsync(ImmutableArray<string>.Empty);
@@ -99,8 +103,17 @@ public class ApplicationsControllerTests
         var result = await CreateController(manager).Get("app-1");
 
         var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        if (expectedClientType is null)
+        {
+            api.Success.Should().BeFalse();
+            api.Code.Should().Be(Errors.InvalidRequest.Code);
+            api.Message.Should().Contain("ClientType");
+            return;
+        }
+
+        api.Success.Should().BeTrue();
         var data = api.Data!;
-        data.GetType().GetProperty("clientType")!.GetValue(data).Should().Be("public");
+        data.GetType().GetProperty("clientType")!.GetValue(data).Should().Be(expectedClientType);
     }
 
     [Fact]
@@ -145,8 +158,12 @@ public class ApplicationsControllerTests
         data.GetType().GetProperty("userCodeLifetime")!.GetValue(data).Should().BeNull();
     }
 
-    [Fact]
-    public async Task List_NullClientTypeMapsToPublic()
+    [Theory]
+    [InlineData(null, "public")]
+    [InlineData("PUBLIC", "public")]
+    [InlineData("CONFIDENTIAL", "confidential")]
+    [InlineData("legacy", null)]
+    public async Task List_ClientTypeIsNormalizedForResponse(string? rawClientType, string? expectedClientType)
     {
         var application = new object();
         var manager = new Mock<IOpenIddictApplicationManager>();
@@ -158,7 +175,7 @@ public class ApplicationsControllerTests
         manager.Setup(x => x.GetApplicationTypeAsync(application, It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
         manager.Setup(x => x.GetClientTypeAsync(application, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync(rawClientType);
         manager.Setup(x => x.GetConsentTypeAsync(application, It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
         manager.Setup(x => x.GetRedirectUrisAsync(application, It.IsAny<CancellationToken>()))
@@ -173,9 +190,20 @@ public class ApplicationsControllerTests
         var result = await CreateController(manager).List();
 
         var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        if (expectedClientType is null)
+        {
+            api.Success.Should().BeFalse();
+            api.Code.Should().Be(Errors.InvalidRequest.Code);
+            api.Message.Should().Contain("ClientType");
+            return;
+        }
+
+        api.Success.Should().BeTrue();
         var rows = api.Data.Should().BeOfType<List<object>>().Subject;
         rows.Should().ContainSingle();
-        rows[0].GetType().GetProperty("clientType")!.GetValue(rows[0]).Should().Be("public");
+        rows[0].GetType().GetProperty("clientType")!.GetValue(rows[0]).Should().Be(expectedClientType);
+        rows[0].GetType().GetProperty("clientSecret").Should().BeNull();
+        rows[0].GetType().GetProperty("jsonWebKeySet").Should().BeNull();
     }
 
     [Fact]
@@ -303,6 +331,86 @@ public class ApplicationsControllerTests
         api.Success.Should().BeFalse();
         api.Code.Should().Be(Errors.InvalidRequest.Code);
         api.Message.Should().Be("public 客户端不能设置 ClientSecret");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_ConfidentialClientWithoutCredentialsReturnsValidationError()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "confidential"
+        });
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be("confidential 客户端必须设置 ClientSecret 或 JWKS");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(null, null, "public")]
+    [InlineData("PUBLIC", null, "public")]
+    [InlineData("CONFIDENTIAL", "secret", "confidential")]
+    public async Task Create_NormalizesClientTypeBeforePersisting(
+        string? clientType, string? clientSecret, string expectedClientType)
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        OpenIddictApplicationDescriptor? captured = null;
+        manager.Setup(x => x.FindByClientIdAsync("client-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((object?)null);
+        manager.Setup(x => x.CreateAsync(
+                It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()))
+            .Callback<OpenIddictApplicationDescriptor, CancellationToken>((descriptor, _) => captured = descriptor)
+            .Returns(new ValueTask<object>("app-1"));
+
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = clientType,
+            ClientSecret = clientSecret
+        });
+
+        AssertSuccess(result);
+        captured.Should().NotBeNull();
+        captured!.ClientType.Should().Be(expectedClientType);
+    }
+
+    [Fact]
+    public async Task Create_InvalidModelStateReturnsValidationErrorWithoutWriting()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var controller = CreateController(manager);
+        controller.ModelState.AddModelError(nameof(ApplicationInput.AccessTokenLifetime), "格式不合法");
+
+        var result = await controller.Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public"
+        });
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(400);
+        api.Message.Should().Contain("格式不合法");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_NullBodyReturnsValidationErrorWithoutWriting()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+
+        var result = await CreateController(manager).Create(null!);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(400);
+        api.Message.Should().NotBeNullOrWhiteSpace();
         manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -444,11 +552,15 @@ public class ApplicationsControllerTests
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:///tmp/callback")]
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "javascript:alert(1)")]
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "data:text/plain,callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "http:///callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "https:///callback")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "//example.com/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:relative/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:///tmp/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "javascript:alert(1)")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "data:text/plain,logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "http:///logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "https:///logout")]
     public async Task Create_NonHttpApplicationUriReturnsValidationError(
         string propertyName, string expectedPropertyName, string uri)
     {
@@ -475,11 +587,15 @@ public class ApplicationsControllerTests
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:///tmp/callback")]
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "javascript:alert(1)")]
     [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "data:text/plain,callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "http:///callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "https:///callback")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "//example.com/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:relative/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:///tmp/logout")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "javascript:alert(1)")]
     [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "data:text/plain,logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "http:///logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "https:///logout")]
     public async Task Update_NonHttpApplicationUriReturnsValidationError(
         string propertyName, string expectedPropertyName, string uri)
     {
@@ -558,6 +674,41 @@ public class ApplicationsControllerTests
         api.Code.Should().Be(Errors.InvalidRequest.Code);
         api.Message.Should().Be(message);
         manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), 0, "AccessTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), 0, "AuthorizationCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), 0, "RefreshTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), 0, "IdentityTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), 0, "DeviceCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.UserCodeLifetime), 0, "UserCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AccessTokenLifetime), -1, "AccessTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), -1, "AuthorizationCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), -1, "RefreshTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.IdentityTokenLifetime), -1, "IdentityTokenLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.DeviceCodeLifetime), -1, "DeviceCodeLifetime 必须大于 0")]
+    [InlineData(nameof(ApplicationInput.UserCodeLifetime), -1, "UserCodeLifetime 必须大于 0")]
+    public async Task Update_NonPositiveLifetimeReturnsValidationError(
+        string propertyName, int value, string message)
+    {
+        var application = new object();
+        var (manager, capture) = CreateUpdateManager(
+            application,
+            new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}"),
+            "old-secret");
+        var input = ValidUpdateInput();
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, value);
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be(message);
+        capture.Descriptor.Should().BeNull();
+        manager.Verify(x => x.PopulateAsync(
+            It.IsAny<OpenIddictApplicationDescriptor>(), application, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

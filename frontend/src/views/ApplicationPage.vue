@@ -201,7 +201,11 @@ async function handleSave(){
   const validation=validateApplicationForm(form.value,editing.value)
   if(validation){ valMsg.value=t(`applications.${validation}`); return }
   const d=await saveApplication(buildApplicationPayload(form.value,editing.value),editing.value?editId.value:undefined)
-  if(d.code===200){ editController.close(); await loadApps(); msg.success(t('applications.saveSuccess')) } else msg.error(d.message||t('applications.saveFailed'))
+  if(d.code===200){
+    editController.close(); await loadApps(); msg.success(t('applications.saveSuccess'))
+  } else {
+    msg.error(d.message||t('applications.saveFailed'))
+  }
 }
 
 async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${a.id}`,{method:'DELETE',credentials:'include'}); const d=await r.json(); if(d.code===200){ await loadApps(); msg.success(t('applications.deleteSuccess')) } else msg.error(d.message||t('applications.deleteFailed')) }

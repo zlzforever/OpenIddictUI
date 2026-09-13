@@ -144,6 +144,20 @@ test('detail mapping treats a null client type as public', async () => {
   assert.equal(form.clientType, 'public')
 })
 
+test('detail mapping leaves sensitive credential fields blank', async () => {
+  const { applicationFormFromDetail } = await loadFormModule()
+
+  const form = applicationFormFromDetail({
+    id: 'app-1',
+    clientId: 'client-1',
+    clientSecret: 'server-secret',
+    jsonWebKeySet: '{"keys":[{"kid":"server-key"}]}'
+  })
+
+  assert.equal(form.clientSecret, '')
+  assert.equal(form.jsonWebKeySet, '')
+})
+
 test('detail loading returns no form when the request fails', async () => {
   const { loadApplicationForm } = await loadFormModule()
 
