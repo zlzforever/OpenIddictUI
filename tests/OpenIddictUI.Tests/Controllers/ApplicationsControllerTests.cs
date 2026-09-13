@@ -439,6 +439,96 @@ public class ApplicationsControllerTests
     }
 
     [Theory]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "//example.com/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:relative/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:///tmp/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "javascript:alert(1)")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "data:text/plain,callback")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "//example.com/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:relative/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:///tmp/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "javascript:alert(1)")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "data:text/plain,logout")]
+    public async Task Create_NonHttpApplicationUriReturnsValidationError(
+        string propertyName, string expectedPropertyName, string uri)
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        var input = new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public"
+        };
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, new List<string> { uri });
+
+        var result = await CreateController(manager).Create(input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be($"{expectedPropertyName} 必须是合法的绝对 URI");
+        manager.Verify(x => x.FindByClientIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "//example.com/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:relative/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "file:///tmp/callback")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "javascript:alert(1)")]
+    [InlineData(nameof(ApplicationInput.RedirectUris), "RedirectUri", "data:text/plain,callback")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "//example.com/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:relative/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "file:///tmp/logout")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "javascript:alert(1)")]
+    [InlineData(nameof(ApplicationInput.PostLogoutRedirectUris), "PostLogoutRedirectUri", "data:text/plain,logout")]
+    public async Task Update_NonHttpApplicationUriReturnsValidationError(
+        string propertyName, string expectedPropertyName, string uri)
+    {
+        var application = new object();
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        manager.Setup(x => x.FindByIdAsync("app-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(application);
+        var input = ValidUpdateInput();
+        input.ClientType = "public";
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, new List<string> { uri });
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        var api = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<ApiResult>().Subject;
+        api.Success.Should().BeFalse();
+        api.Code.Should().Be(Errors.InvalidRequest.Code);
+        api.Message.Should().Be($"{expectedPropertyName} 必须是合法的绝对 URI");
+        manager.Verify(x => x.PopulateAsync(
+            It.IsAny<OpenIddictApplicationDescriptor>(), application, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_HttpAndHttpsUrisBuildDescriptor()
+    {
+        var manager = new Mock<IOpenIddictApplicationManager>();
+        OpenIddictApplicationDescriptor? captured = null;
+        manager.Setup(x => x.FindByClientIdAsync("client-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((object?)null);
+        manager.Setup(x => x.CreateAsync(
+                It.IsAny<OpenIddictApplicationDescriptor>(), It.IsAny<CancellationToken>()))
+            .Callback<OpenIddictApplicationDescriptor, CancellationToken>((descriptor, _) => captured = descriptor)
+            .Returns(new ValueTask<object>("app-1"));
+
+        var result = await CreateController(manager).Create(new ApplicationInput
+        {
+            ClientId = "client-1",
+            ClientType = "public",
+            RedirectUris = ["http://client.example/callback"],
+            PostLogoutRedirectUris = ["https://client.example/logout"]
+        });
+
+        AssertSuccess(result);
+        captured.Should().NotBeNull();
+        captured!.RedirectUris.Should().BeEquivalentTo(new[] { new Uri("http://client.example/callback") });
+        captured.PostLogoutRedirectUris.Should()
+            .BeEquivalentTo(new[] { new Uri("https://client.example/logout") });
+    }
+
+    [Theory]
     [InlineData(nameof(ApplicationInput.AccessTokenLifetime), 0, "AccessTokenLifetime 必须大于 0")]
     [InlineData(nameof(ApplicationInput.AuthorizationCodeLifetime), 0, "AuthorizationCodeLifetime 必须大于 0")]
     [InlineData(nameof(ApplicationInput.RefreshTokenLifetime), 0, "RefreshTokenLifetime 必须大于 0")]
@@ -482,6 +572,49 @@ public class ApplicationsControllerTests
         AssertSuccess(result);
         capture.Descriptor.Should().NotBeNull();
         capture.Descriptor!.ClientSecret.Should().Be("old-secret");
+        capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("old");
+    }
+
+    [Theory]
+    [InlineData(nameof(ApplicationInput.ClientSecret), "")]
+    [InlineData(nameof(ApplicationInput.ClientSecret), "   ")]
+    [InlineData(nameof(ApplicationInput.JsonWebKeySet), "")]
+    [InlineData(nameof(ApplicationInput.JsonWebKeySet), "   ")]
+    public async Task Update_EmptyOrWhitespaceCredentialsPreserveExistingValues(
+        string propertyName, string value)
+    {
+        var application = new object();
+        var existingKeys = new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}");
+        var (manager, capture) = CreateUpdateManager(application, existingKeys, "old-secret");
+        var input = ValidUpdateInput();
+        typeof(ApplicationInput).GetProperty(propertyName)!.SetValue(input, value);
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.ClientSecret.Should().Be("old-secret");
+        capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("old");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Update_PublicSwitchWithEmptyOrWhitespaceJwksPreservesExistingValue(string value)
+    {
+        var application = new object();
+        var existingKeys = new JsonWebKeySet("{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"old\"}]}");
+        var (manager, capture) = CreateUpdateManager(application, existingKeys, "old-secret");
+        var input = ValidUpdateInput();
+        input.ClientType = "public";
+        input.JsonWebKeySet = value;
+
+        var result = await CreateController(manager).Update("app-1", input);
+
+        AssertSuccess(result);
+        capture.Descriptor.Should().NotBeNull();
+        capture.Descriptor!.ClientType.Should().Be("public");
+        capture.Descriptor.ClientSecret.Should().BeNull();
         capture.Descriptor.JsonWebKeySet!.Keys.Single().Kid.Should().Be("old");
     }
 

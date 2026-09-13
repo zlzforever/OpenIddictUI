@@ -269,16 +269,14 @@ public class ApplicationsController(
         {
             descriptor.ClientSecret = null;
         }
-        else if (input.ClientSecret is not null)
+        else if (!string.IsNullOrWhiteSpace(input.ClientSecret))
         {
             descriptor.ClientSecret = input.ClientSecret;
         }
 
-        if (input.JsonWebKeySet is not null)
+        if (!string.IsNullOrWhiteSpace(input.JsonWebKeySet))
         {
-            descriptor.JsonWebKeySet = string.IsNullOrWhiteSpace(input.JsonWebKeySet)
-                ? null
-                : new JsonWebKeySet(input.JsonWebKeySet);
+            descriptor.JsonWebKeySet = new JsonWebKeySet(input.JsonWebKeySet);
         }
 
         if (!string.IsNullOrWhiteSpace(input.ClientUrl))
@@ -392,7 +390,10 @@ public class ApplicationsController(
     {
         foreach (var uri in uris ?? [])
         {
-            if (string.IsNullOrWhiteSpace(uri) || !Uri.TryCreate(uri, UriKind.Absolute, out _))
+            if (string.IsNullOrWhiteSpace(uri) ||
+                !Uri.TryCreate(uri, UriKind.Absolute, out var parsedUri) ||
+                (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps) ||
+                string.IsNullOrWhiteSpace(parsedUri.Host))
             {
                 return ApiResult.Error(Errors.InvalidRequest.Code, $"{propertyName} 必须是合法的绝对 URI");
             }

@@ -77,6 +77,18 @@ test('edit payload omits unchanged credentials but sends explicitly entered valu
   assert.equal(changed.jsonWebKeySet, '{"keys":[{"kid":"new"}]}')
 })
 
+test('edit payload omits whitespace-only credentials', async () => {
+  const { buildApplicationPayload } = await loadFormModule()
+  const form = baseForm()
+  form.clientSecret = '  \n'
+  form.jsonWebKeySet = '\t'
+
+  const payload = buildApplicationPayload(form, true)
+
+  assert.equal(Object.hasOwn(payload, 'clientSecret'), false)
+  assert.equal(Object.hasOwn(payload, 'jsonWebKeySet'), false)
+})
+
 test('edit payload omits empty display URLs so existing settings are preserved', async () => {
   const { buildApplicationPayload } = await loadFormModule()
 
