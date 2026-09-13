@@ -26,6 +26,10 @@ STS 支持 PostgreSQL 和 MySQL 8.0+。完整的 provider 选择、`DefaultConne
 - PostgreSQL 与 MySQL 的 EF provider 和分布式缓存都会使用 `ConnectionStrings:DefaultConnection`，不会在数据库不可用时降级到内存缓存。
 - MySQL 仅支持 8.0 及以上版本，不承诺 MySQL 5.7 或 MariaDB；应用启动时会准备并校验 MySQL 缓存表。
 
+## Application 管理契约
+
+管理员 SPA 的 Application 列表、详情、创建/编辑请求、敏感凭据更新、URI/lifetime 校验及详情加载行为见 [`docs/application-management.md`](docs/application-management.md)。
+
 ## 项目结构
 
 ```
