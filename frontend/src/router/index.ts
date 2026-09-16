@@ -20,6 +20,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/account/login' },
     { path: '/account/login', name: 'login', component: () => import('../views/LoginPage.vue') },
+    { path: '/account/bind-external', name: 'bind-external', component: () => import('../views/ExternalBindingPage.vue') },
     { path: '/welcome', name: 'welcome', component: () => import('../views/WelcomePage.vue') },
     { path: '/consent/:id', name: 'consent', component: () => import('../views/ConsentPage.vue') },
     { path: '/logout', name: 'logout', component: () => import('../views/LogoutPage.vue') },
@@ -53,7 +54,7 @@ router.beforeEach(async (to) => {
   }
 
   // ② 白名单：以下页面无需登录
-  if (to.path === '/welcome' || to.path === '/logged-out' || to.path.startsWith('/consent'))
+  if (to.path === '/welcome' || to.path === '/logged-out' || to.path === '/account/bind-external' || to.path.startsWith('/consent'))
   {
     return
   }

@@ -18,7 +18,8 @@ const providers = ref<ExternalProvider[]>([])
 
 export function useProviders() {
   function register(config: ExternalProvider) {
-    const idx = providers.value.findIndex((p) => p.id === config.id)
+    const idx = providers.value.findIndex((p) =>
+      p.id.localeCompare(config.id, undefined, { sensitivity: 'accent' }) === 0)
     if (idx >= 0) providers.value[idx] = config
     else providers.value.push(config)
   }

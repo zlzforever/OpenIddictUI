@@ -6,9 +6,10 @@
       "dotnetRunMessages": true,
       "launchBrowser": false,
       "launchUrl": "login",
-      "applicationUrl": "http://localhost:5164",
+      "applicationUrl": "http://+:10023",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "BASE_PATH": "/openid/"
       }
     }
   }

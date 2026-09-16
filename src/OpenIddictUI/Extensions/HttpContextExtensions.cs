@@ -15,7 +15,7 @@ public static class HttpContextExtensions
         {
             return true;
         }
-        var captchaId = httpContext.Request.Headers[Util.CaptchaIdHeader].FirstOrDefault();
+        var captchaId = httpContext.Request.Cookies[Util.CaptchaImageCookie];
 
         if (string.IsNullOrEmpty(captchaId))
         {
@@ -30,6 +30,12 @@ public static class HttpContextExtensions
         }
 
         await cache.RemoveAsync(cacheKey);
+        httpContext.Response.Cookies.Delete(Util.CaptchaImageCookie, new CookieOptions
+        {
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            Path = "/"
+        });
         return true;
     }
 }

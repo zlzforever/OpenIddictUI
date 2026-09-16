@@ -10,11 +10,9 @@ public class AntiforgeryController(IAntiforgery antiforgery) : Controller
     public IActionResult Token()
     {
         var tokens = antiforgery.GetAndStoreTokens(HttpContext);
-        return Ok(new TokenResponse { Token = tokens.RequestToken });
+        return Ok(new TokenResponse(tokens.RequestToken));
     }
 
-    private class TokenResponse
-    {
-        public string? Token { get; set; }
-    }
+    // ReSharper disable once NotAccessedPositionalProperty.Global
+    private record TokenResponse(string? Token);
 }

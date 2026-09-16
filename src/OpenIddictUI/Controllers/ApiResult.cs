@@ -37,6 +37,10 @@ public static class Errors
     public const int UserAlreadyExists = 4018;
     public const int SliderCaptchaExpired = 4019;
     public const int SliderCaptchaFailed = 4020;
+    public const int ExternalBindingExpired = 4026;
+    public const int ExternalAlreadyBound = 4027;
+    public const int ExternalBindingFailed = 4028;
+    public const int ExternalBindingAttemptsExceeded = 4029;
 
     // 以下为"code + 固定 message"的快捷返回，调用方不再写 message
     public static ApiResult UserLockedOutResult => ApiResult.Error(UserLockedOut, "用户被锁定");
@@ -65,6 +69,14 @@ public static class Errors
     public static ApiResult ResetPasswordByPhoneFailed => ApiResult.Error(VerifyCodeIncorrect, "重置密码失败");
     public static ApiResult SliderCaptchaExpiredResult => ApiResult.Error(SliderCaptchaExpired, "验证已过期，请重试");
     public static ApiResult SliderCaptchaFailedResult => ApiResult.Error(SliderCaptchaFailed, "验证失败，请重试");
+    public static ApiResult ExternalBindingExpiredResult =>
+        ApiResult.Error(ExternalBindingExpired, "外部绑定流程已失效，请重新登录");
+    public static ApiResult ExternalAlreadyBoundResult =>
+        ApiResult.Error(ExternalAlreadyBound, "外部账号已绑定其他用户");
+    public static ApiResult ExternalBindingFailedResult =>
+        ApiResult.Error(ExternalBindingFailed, "外部账号绑定失败，请重试");
+    public static ApiResult ExternalBindingAttemptsExceededResult =>
+        ApiResult.Error(ExternalBindingAttemptsExceeded, "验证码错误次数过多，请重新登录");
     public static ApiResult NotAuthenticated => ApiResult.Error(401, "Not authenticated");
     public static ApiResult InvalidRequest => ApiResult.Error(400, "请求不合法");
     public static ApiResult InvalidAntiForgery => ApiResult.Error(400, "Invalid anti-forgery token");

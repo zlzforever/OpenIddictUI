@@ -2,12 +2,6 @@ namespace OpenIddictUI.Options;
 
 public class OpenIddictOptions
 {
-    // public bool AutomaticRedirectAfterSignOut { get; set; }
-    // public bool AllowLocalLogin { get; set; } = true;
-    // public bool AllowRememberLogin { get; set; } = true;
-    // public bool ShowLogoutPrompt { get; set; } = true;
-    // public int RememberMeLoginDuration { get; set; }
-    // public string? WindowsAuthenticationSchemeName { get; set; }
     public int? VerifyCodeLength { get; set; } = 6;
     public string SmsSender { get; set; } = "Console";
     public bool ForcePasswordSecurityPolicy { get; set; }

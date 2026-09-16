@@ -49,7 +49,7 @@ public class CaptchaController(
         var code = GenerateCode(options.Value.GetVerifyCodeLength());
         var captchaId = Guid.CreateVersion7().ToString("N");
         var cacheKey = string.Format(Util.CaptchaImageKey, captchaId);
-        Response.Headers[Util.CaptchaIdHeader] = captchaId;
+        SetCaptchaCookie(Util.CaptchaImageCookie, captchaId, TimeSpan.FromMinutes(3));
         hybridCache.SetAsync(cacheKey, code, new HybridCacheEntryOptions
         {
             Expiration = TimeSpan.FromMinutes(3),
@@ -107,15 +107,16 @@ public class CaptchaController(
         await hybridCache.SetAsync(string.Format(Util.CaptchaSliderKey, id), notchX,
             new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(3) });
 
-        Response.Headers[Util.CaptchaIdHeader] = id;
+        SetCaptchaCookie(Util.CaptchaSliderCookie, id, TimeSpan.FromMinutes(3));
         return File(imageBytes, "image/jpeg");
     }
 
     /// <summary>校验滑块位置</summary>
     [HttpPost("slider/verify")]
+    [AutoValidateAntiforgeryToken]
     public async Task<IActionResult> SliderVerify([FromBody] SliderVerifyInput input)
     {
-        var captchaId = Request.Headers[Util.CaptchaIdHeader].FirstOrDefault() ?? string.Empty;
+        var captchaId = Request.Cookies[Util.CaptchaSliderCookie] ?? string.Empty;
         if (string.IsNullOrEmpty(captchaId))
         {
             return Ok(Errors.InvalidParams);
@@ -129,6 +130,7 @@ public class CaptchaController(
 
         if (stored == null)
         {
+            DeleteCaptchaCookie(Util.CaptchaSliderCookie);
             return Ok(Errors.SliderCaptchaExpiredResult);
         }
 
@@ -142,10 +144,37 @@ public class CaptchaController(
             await hybridCache.SetAsync(string.Format(Util.CaptchaSliderVerified, captchaId), true,
                 new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(2) });
         }
+        else
+        {
+            DeleteCaptchaCookie(Util.CaptchaSliderCookie);
+        }
 
         return Ok(passed
             ? ApiResult.Ok()
             : Errors.SliderCaptchaFailedResult);
+    }
+
+    private void SetCaptchaCookie(string name, string value, TimeSpan maxAge)
+    {
+        Response.Cookies.Append(name, value, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            IsEssential = true,
+            Path = "/",
+            MaxAge = maxAge
+        });
+    }
+
+    private void DeleteCaptchaCookie(string name)
+    {
+        Response.Cookies.Delete(name, new CookieOptions
+        {
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            Path = "/"
+        });
     }
 
     /// <summary>

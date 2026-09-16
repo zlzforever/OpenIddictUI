@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -19,28 +19,34 @@ namespace OpenIddictUI.Controllers;
 /// </summary>
 [AllowAnonymous]
 [Route("account")]
-public class AccountController(
+public partial class AccountController(
     SignInManager<User> signInManager,
     UserManager<User> userManager,
-    HybridCache cache,
-    IAntiforgery antiforgery,
+    HybridCache hybridCache,
     IPasswordValidator<User> passwordValidator,
     IOptions<OpenIddictOptions> options,
+    IOptions<GlobalOptions> globalOptions,
+    ISmsManager smsManager,
     ILogger<AccountController> logger) : Controller
 {
+    /// <summary>
+    /// 返回前端可用的登录方式。配置值按约定归一化为小写并去重；外部 provider 由其 authentication scheme 注册方提供。
+    /// </summary>
+    [HttpGet("providers")]
+    public IActionResult Providers()
+    {
+        var providers = globalOptions.Value.AuthenticationSchemes;
+        return Ok(ApiResult.Ok(data: providers));
+    }
+
     /// <summary>
     /// 密码登录 — 用户名 + 密码 + 验证码
     /// 成功返回 { location } → 前端跳转到 returnUrl（通常回到 /connect/authorize 继续 OAuth 流程）
     /// </summary>
     [HttpPost("login")]
+    [AutoValidateAntiforgeryToken]
     public async Task<IActionResult> Login([FromBody] LoginInput model)
     {
-        // ① CSRF 校验（X-XSRF-TOKEN header）
-        if (!await ValidateCsrf())
-        {
-            return CsrfError();
-        }
-
         // ② 模型验证（[Required] / [StringLength]）
         if (!ModelState.IsValid)
         {
@@ -52,6 +58,12 @@ public class AccountController(
             return Ok(Errors.InvalidRequest);
         }
 
+        var loginProvider = GetLoginProviderConfigured(Util.LoginProviderPassword);
+        if (string.IsNullOrEmpty(loginProvider))
+        {
+            return Ok(Errors.InvalidRequest);
+        }
+
         // ③ 取消按钮 → 直接跳回
         if (model.Button != "login")
         {
@@ -59,7 +71,7 @@ public class AccountController(
         }
 
         // ④ 图形验证码（Dev 环境跳过）
-        if (!await HttpContext.CheckCaptchaAsync(cache, model.CaptchaCode))
+        if (!await HttpContext.CheckCaptchaAsync(hybridCache, model.CaptchaCode))
         {
             return Ok(Errors.InvalidCaptcha);
         }
@@ -105,19 +117,21 @@ public class AccountController(
     /// 注意：验证码由 /account/sendCode 发送，用户手机接收后填入
     /// </summary>
     [HttpPost("login-by-sms")]
+    [AutoValidateAntiforgeryToken]
     public async Task<IActionResult> LoginBySms([FromBody] LoginByCodeInput model)
     {
-        if (!await ValidateCsrf())
-        {
-            return CsrfError();
-        }
-
         if (!ModelState.IsValid)
         {
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
         if (!IsValidReturnUrl(model.ReturnUrl))
+        {
+            return Ok(Errors.InvalidRequest);
+        }
+
+        var loginProvider = GetLoginProviderConfigured(Util.LoginProviderSms);
+        if (string.IsNullOrEmpty(loginProvider))
         {
             return Ok(Errors.InvalidRequest);
         }
@@ -183,13 +197,14 @@ public class AccountController(
     }
 
     /// <summary>
-    /// 发送短信验证码 — 支持三种场景（Login / ResetPassword / Register）
+    /// 发送短信验证码 — 支持四种场景（Login / ResetPassword / Register / BindExternal）
     /// Login: 用户必须存在，生成 phone token → VerifyUserTokenAsync("Login")
     /// ResetPassword: 用户必须存在，生成 phone token → VerifyUserTokenAsync("ResetPassword")
     /// Register: 用户必须不存在，生成随机 6 位码 → 存入 HybridCache TTL 5min → 注册时比对
     /// 限频：同一手机号 60s 内只能发一次（HybridCache 控制）
     /// </summary>
     [HttpPost("send-sms-code")]
+    [AutoValidateAntiforgeryToken]
     public async Task<IActionResult> SendCode([FromBody] SendCodeInput model)
     {
         if (!ModelState.IsValid)
@@ -197,103 +212,110 @@ public class AccountController(
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
-        // ① 限频检查：同一手机号 60s 内不发第二次
-        var key = string.Format(Util.SmsRateLimit, model.PhoneNumber);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        var cached = await cache.GetOrCreateAsync(
-            key,
-            _ => new ValueTask<long?>((long?)null),
-            new HybridCacheEntryOptions { Flags = HybridCacheEntryFlags.DisableLocalCacheWrite }
-        );
-        if (cached.HasValue && now - cached.Value < 60)
+        var phoneNumber = model.PhoneNumber.Trim();
+        var countryCode = string.IsNullOrWhiteSpace(model.CountryCode) ? "+86" : model.CountryCode.Trim();
+        var scenario = NormalizeScenario(model.Scenario);
+        if (scenario == null)
         {
-            return Ok(ApiResult.Ok("发送成功")); // 模糊响应防爆破
+            return Ok(Errors.InvalidRequest);
         }
 
-        var scenario = model.Scenario;
-        var smsSender = HttpContext.RequestServices.GetRequiredKeyedService<ISmsSender>(options.Value.SmsSender);
-        // ② Register 场景：手机号不能已注册
-        if (string.Equals(scenario, "Register", StringComparison.OrdinalIgnoreCase))
-        {
-            var existingUser = await userManager.Users.FirstOrDefaultAsync(u =>
-                u.PhoneNumber == model.PhoneNumber);
-            if (existingUser != null)
-            {
-                logger.LogWarning("SendCode(Register): phone already exists {PhoneNumber}", model.PhoneNumber);
-                return Ok(ApiResult.Ok("发送成功")); // 模糊响应，不暴露用户存在
-            }
-
-            // 图形验证码 / 滑动验证码校验
-            var captchaErr = await VerifyCaptchaOrSliderAsync(model.CaptchaCode);
-            if (captchaErr != null)
-            {
-                logger.LogDebug("SendCode(Register): captcha/slider failed for {Phone}", model.PhoneNumber);
-                return Ok(captchaErr);
-            }
-
-            // 生成随机 6 位验证码（没有用户实体，无法用 UserManager token provider）
-            var registerCode = System.Security.Cryptography.RandomNumberGenerator
-                .GetInt32(100000, 999999).ToString();
-
-            // 发送短信
-            try
-            {
-                await smsSender.SendAsync($"{model.CountryCode} {model.PhoneNumber}", registerCode);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "SMS send failed: {PhoneNumber}", model.PhoneNumber);
-                return Ok(Errors.SendSmsFailedResult);
-            }
-
-            // 存入 HybridCache：TTL 5 分钟，注册时比对
-            await cache.SetAsync(string.Format(Util.RegisterCode, model.PhoneNumber), registerCode,
-                new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(5) });
-
-            // 记录发送时间戳 → 60s TTL
-            await cache.SetAsync(key, now, new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(60) });
-
-            logger.LogInformation("SendCode(Register): code sent to {PhoneNumber}", model.PhoneNumber);
-            return Ok(ApiResult.Ok("发送成功"));
-        }
-
-        // ③ Login / ResetPassword 场景：用户必须存在
-        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
-        if (user == null)
-        {
-            logger.LogWarning("SendCode({Scenario}): user not found {PhoneNumber}", scenario, model.PhoneNumber);
-            return Ok(ApiResult.Ok("发送成功")); // 模糊响应防用户枚举
-        }
-
-        if (await userManager.IsLockedOutAsync(user))
-        {
-            return Ok(Errors.UserLockedOutResult);
-        }
-
-        // ④ 验证码校验：有 CaptchaCode 验图形，无 CaptchaCode 验滑块
-        var captchaError = await VerifyCaptchaOrSliderAsync(model.CaptchaCode, user);
+        // ① 所有短信场景统一使用滑块验证
+        var captchaError = await VerifyCaptchaAsync();
         if (captchaError != null)
         {
             return Ok(captchaError);
         }
 
-        // ⑤ 生成验证码
-        var code = await userManager.GenerateUserTokenAsync(user, TokenOptions.DefaultPhoneProvider, scenario);
-        // ⑥ 发送短信
-        try
+        // ② Register 场景：手机号不能已注册
+        var rateLimitKey = string.Format(Util.SmsRateLimit, phoneNumber);
+        if (scenario == Util.PurposeRegister)
         {
-            await smsSender.SendAsync($"{model.CountryCode} {model.PhoneNumber}", code);
+            return await SendRegisterCode(scenario, countryCode, phoneNumber, rateLimitKey);
         }
-        catch (Exception ex)
+        else if (scenario == Util.PurposeBindExternal)
         {
-            logger.LogError(ex, "SMS send failed: {PhoneNumber}", model.PhoneNumber);
-            return Ok(Errors.SendSmsFailedResult);
+            return await SendExternalBindingCode(countryCode, phoneNumber, rateLimitKey);
         }
 
-        // ⑦ 记录发送时间戳 → 60s TTL
-        await cache.SetAsync(key, now, new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(60) });
-        return Ok(ApiResult.Ok("发送成功"));
+        // ③ Login / ResetPassword 场景：用户必须存在
+        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
+        if (user == null)
+        {
+            logger.LogWarning("SendCode({Scenario}): user not found {PhoneNumber}", scenario, phoneNumber);
+            return Ok(ApiResult.Ok("发送成功")); // 模糊响应防用户枚举
+        }
+
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            logger.LogWarning("SendCode({Scenario}): user is locked-out {UserId}", scenario, user.Id);
+            return Ok(Errors.UserLockedOutResult);
+        }
+
+        // ③ 生成验证码
+        var code = await userManager.GenerateUserTokenAsync(user, TokenOptions.DefaultPhoneProvider, scenario);
+        var sendStatus = await smsManager.SendAsync(new SendCodeRequest(
+            phoneNumber,
+            countryCode,
+            code,
+            rateLimitKey,
+            scenario));
+        if (sendStatus == SmsSendStatus.RateLimited)
+        {
+            logger.LogWarning("SendCode({Scenario}): phone is too frequent {PhoneNumber}", scenario, phoneNumber);
+            return Ok(ApiResult.Ok("发送成功"));
+        }
+
+        return Ok(sendStatus != SmsSendStatus.Sent ? Errors.SendSmsFailedResult : ApiResult.Ok("发送成功"));
+    }
+
+    private async Task<IActionResult> SendRegisterCode(string scenario, string countryCode, string phoneNumber,
+        string rateLimitKey)
+    {
+        var existingUser = await userManager.Users.AnyAsync(u =>
+            u.PhoneNumber == phoneNumber);
+        if (existingUser)
+        {
+            logger.LogWarning("SendCode(Register): phone already exists {PhoneNumber}", phoneNumber);
+            return Ok(ApiResult.Ok("发送成功")); // 模糊响应，不暴露用户存在
+        }
+
+        // 生成随机 6 位验证码（没有用户实体，无法用 UserManager token provider）
+        var registerCode = System.Security.Cryptography.RandomNumberGenerator
+            .GetInt32(100000, 999999).ToString();
+
+        var sendResult = await smsManager.SendAsync(new SendCodeRequest(
+            phoneNumber,
+            countryCode,
+            registerCode,
+            rateLimitKey,
+            scenario));
+
+        switch (sendResult)
+        {
+            case SmsSendStatus.Sent:
+            {
+                await hybridCache.SetAsync(
+                    string.Format(Util.RegisterCode, phoneNumber),
+                    registerCode,
+                    new HybridCacheEntryOptions
+                    {
+                        Expiration = TimeSpan.FromMinutes(5),
+                        LocalCacheExpiration = TimeSpan.FromMinutes(5)
+                    });
+
+                return Ok(ApiResult.Ok("发送成功"));
+            }
+            case SmsSendStatus.RateLimited:
+            {
+                return Ok(Errors.SendSmsFailedResult);
+            }
+            default:
+            {
+                logger.LogWarning("SendCode(Register): phone is too frequent {PhoneNumber}", phoneNumber);
+                return Ok(ApiResult.Ok("发送成功"));
+            }
+        }
     }
 
     /// <summary>
@@ -318,7 +340,7 @@ public class AccountController(
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
-        if (!await HttpContext.CheckCaptchaAsync(cache, model.CaptchaCode))
+        if (!await HttpContext.CheckCaptchaAsync(hybridCache, model.CaptchaCode))
         {
             return Ok(Errors.InvalidCaptcha);
         }
@@ -443,75 +465,109 @@ public class AccountController(
     private string GetModelErrors() =>
         string.Join("\n", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
 
-    /// <summary>
-    /// CSRF 手动验证 — [ValidateAntiForgeryToken] 在 AddControllers 中未注册过滤器，手动调用
-    /// </summary>
-    private async Task<bool> ValidateCsrf()
-    {
-        try
-        {
-            await antiforgery.ValidateRequestAsync(HttpContext);
-            return true;
-        }
-        catch (AntiforgeryValidationException)
-        {
-            return false;
-        }
-    }
-
     private bool IsValidReturnUrl(string? returnUrl)
     {
         return string.IsNullOrWhiteSpace(returnUrl) || returnUrl.StartsWith(Util.AuthorizePrefix);
     }
 
-    private IActionResult CsrfError() => BadRequest(Errors.InvalidAntiForgery);
-
-    /// <summary>
-    /// 验证码校验统一入口：有 CaptchaCode 验图形，无 CaptchaCode 验滑块
-    /// 返回 null 表示通过，返回 ApiResult 表示错误（调用方 return Ok(error)）
-    /// </summary>
-    private async Task<ApiResult?> VerifyCaptchaOrSliderAsync(string? captchaCode, User? user = null)
+    private RedirectResult RedirectToLogin(string error, string? returnUrl = null)
     {
-        if (!string.IsNullOrEmpty(captchaCode))
+        var pathBase = Util.BasePath;
+        var loginUrl = string.IsNullOrEmpty(pathBase)
+            ? "/account/login"
+            : $"{pathBase}/account/login";
+        var query = $"error={Uri.EscapeDataString(error)}";
+        if (IsValidReturnUrl(returnUrl))
         {
-            if (!await HttpContext.CheckCaptchaAsync(cache, captchaCode))
-            {
-                if (user != null && userManager.SupportsUserLockout)
-                {
-                    var afResult = await userManager.AccessFailedAsync(user);
-                    if (!afResult.Succeeded)
-                    {
-                        logger.LogWarning("Captcha: AccessFailed 失败 {User}, {Errors}", user.UserName,
-                            string.Join(", ", afResult.Errors.Select(e => e.Description)));
-                    }
-                }
-
-                return Errors.InvalidCaptcha;
-            }
-
-            return null;
+            query += $"&returnUrl={Uri.EscapeDataString(returnUrl!)}";
         }
 
-        // 无 CaptchaCode → 校验滑块
-        var sliderId = Request.Headers[Util.CaptchaIdHeader].FirstOrDefault();
+        return Redirect($"{loginUrl}?{query}");
+    }
+
+    /// <summary>
+    /// 短信发送统一使用滑块验证。
+    /// 验证失败不计入账户锁定次数，避免短信发送接口被用来锁定账户。
+    /// 返回 null 表示通过，返回 ApiResult 表示错误（调用方 return Ok(error)）
+    /// </summary>
+    private async Task<ApiResult?> VerifyCaptchaAsync()
+    {
+        var sliderId = Request.Cookies[Util.CaptchaSliderCookie];
         if (string.IsNullOrEmpty(sliderId))
         {
             return Errors.SliderRequired;
         }
 
         var verifiedKey = string.Format(Util.CaptchaSliderVerified, sliderId);
-        var sliderPassed = await cache.GetOrCreateAsync(
+        var sliderPassed = await hybridCache.GetOrCreateAsync(
             verifiedKey,
             _ => new ValueTask<bool?>((bool?)null),
             new HybridCacheEntryOptions { Flags = HybridCacheEntryFlags.DisableLocalCacheWrite });
 
         if (sliderPassed != true)
         {
+            Response.Cookies.Delete(Util.CaptchaSliderCookie, new CookieOptions
+            {
+                Secure = true,
+                SameSite = SameSiteMode.Lax,
+                Path = "/"
+            });
             return Errors.SliderRequired;
         }
 
-        await cache.RemoveAsync(verifiedKey);
+        await hybridCache.RemoveAsync(verifiedKey);
+        Response.Cookies.Delete(Util.CaptchaSliderCookie, new CookieOptions
+        {
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            Path = "/"
+        });
         return null;
+    }
+
+    private string? GetLoginProviderConfigured(string provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return null;
+        }
+
+        var configuredProvider = globalOptions.Value.AuthenticationSchemes.FirstOrDefault(configured =>
+            string.Equals(configured, provider, StringComparison.OrdinalIgnoreCase));
+
+        return configuredProvider;
+    }
+
+    private static string? NormalizeScenario(string? scenario)
+    {
+        if (string.IsNullOrWhiteSpace(scenario))
+        {
+            return null;
+        }
+
+        if (string.Equals(scenario, Util.PurposeLogin, StringComparison.OrdinalIgnoreCase))
+        {
+            return Util.PurposeLogin;
+        }
+
+        if (string.Equals(scenario, Util.PurposeResetPassword, StringComparison.OrdinalIgnoreCase))
+        {
+            return Util.PurposeResetPassword;
+        }
+
+        if (string.Equals(scenario, Util.PurposeRegister, StringComparison.OrdinalIgnoreCase))
+        {
+            return Util.PurposeRegister;
+        }
+
+        return string.Equals(scenario, Util.PurposeBindExternal, StringComparison.OrdinalIgnoreCase)
+            ? Util.PurposeBindExternal
+            : null;
+    }
+
+    private string BuildApplicationPath(string path)
+    {
+        return $"{Util.BasePath}/{path.TrimStart('/')}";
     }
 }
 

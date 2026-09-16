@@ -17,6 +17,10 @@ public class ErrorsTests
         Errors.UserNotExistResult.Code.Should().Be(Errors.UserNotExist);
         Errors.SliderCaptchaExpiredResult.Code.Should().Be(Errors.SliderCaptchaExpired);
         Errors.SliderCaptchaFailedResult.Code.Should().Be(Errors.SliderCaptchaFailed);
+        Errors.ExternalBindingExpiredResult.Code.Should().Be(Errors.ExternalBindingExpired);
+        Errors.ExternalAlreadyBoundResult.Code.Should().Be(Errors.ExternalAlreadyBound);
+        Errors.ExternalBindingFailedResult.Code.Should().Be(Errors.ExternalBindingFailed);
+        Errors.ExternalBindingAttemptsExceededResult.Code.Should().Be(Errors.ExternalBindingAttemptsExceeded);
         Errors.UserNotAllowedResult.Code.Should().Be(Errors.UserNotAllowed);
         Errors.PasswordValidateFailedResult.Code.Should().Be(Errors.PasswordValidateFailed);
         Errors.ChangePasswordFailedResult.Code.Should().Be(Errors.ChangePasswordFailed);
@@ -65,6 +69,10 @@ public class ErrorsTests
             [Errors.VerifyCodeLoginFailed] = "登录失败",
             [Errors.VerifyCodeIncorrectResult] = "验证码不正确",
             [Errors.ResetPasswordByPhoneFailed] = "重置密码失败",
+            [Errors.ExternalBindingExpiredResult] = "外部绑定流程已失效，请重新登录",
+            [Errors.ExternalAlreadyBoundResult] = "外部账号已绑定其他用户",
+            [Errors.ExternalBindingFailedResult] = "外部账号绑定失败，请重试",
+            [Errors.ExternalBindingAttemptsExceededResult] = "验证码错误次数过多，请重新登录",
         };
 
         foreach (var (result, expectedMsg) in expected)

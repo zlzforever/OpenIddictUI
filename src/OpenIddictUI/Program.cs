@@ -2,6 +2,7 @@ using Identity.Sm;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using MySqlConnector;
 using OpenIddictUI.Data;
 using OpenIddictUI.Extensions;
@@ -11,6 +12,7 @@ using OpenIddictUI.Middlewares;
 using OpenIddictUI.Options;
 using OpenIddictUI.Plugins;
 using OpenIddictUI.Sms;
+using OpenIddictUI.Weixin;
 using Serilog;
 
 namespace OpenIddictUI;
@@ -47,6 +49,7 @@ public partial class Program
         builder.Services.Configure<IdentityExtensionOptions>(config.GetSection("IdentityExtension"));
         builder.Services.Configure<IdentityOptions>(config.GetSection("Identity"));
         builder.Services.Configure<CookiePolicyOptions>(config.GetSection("CookiePolicy"));
+        builder.Services.Configure<GlobalOptions>(config);
 
         var openiddictOptions = openiddictOptionSection.Exists()
             ? openiddictOptionSection.Get<OpenIddictOptions>() ?? new OpenIddictOptions()
@@ -64,6 +67,14 @@ public partial class Program
         // }
 
         builder.Services.AddHealthChecks();
+
+        // builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        // {
+        //     options.ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+        //     // 信任代理IP，生产填写你的网关/nginx内网IP
+        //     options.KnownProxies.Add(IPAddress.Parse(Environment.GetEnvironmentVariable("TRUSTED_PROXY_IP") ??
+        //                                              "127.0.0.1"));
+        // });
 
         RegisterDbContext(builder, databaseProvider, connectionString, migrationsTable);
 
@@ -92,7 +103,59 @@ public partial class Program
             builder.Services.AddSm3PasswordHasher<User>();
         }
 
-        builder.Services.AddAuthentication();
+        var authenticationBuilder = builder.Services.AddAuthentication();
+        var loginProviders = builder.Configuration.Get<GlobalOptions>()?.AuthenticationSchemes;
+        if (loginProviders != null &&
+            loginProviders.Any(provider =>
+                string.Equals(provider?.Trim(), Util.LoginProviderWeixin, StringComparison.OrdinalIgnoreCase)))
+        {
+            var weixinSettings = builder.Configuration.GetSection("Weixin").Get<WeixinOptions>();
+            if (weixinSettings == null)
+            {
+                throw new InvalidOperationException("WeixinOptions is required");
+            }
+
+            authenticationBuilder.AddWeixin(options =>
+            {
+                options.ClientId = weixinSettings.AppId;
+                options.ClientSecret = weixinSettings.AppSecret;
+                options.SignInScheme = IdentityConstants.ExternalScheme;
+
+                if (Util.ServiceProvider == null)
+                {
+                    throw new ArgumentNullException(nameof(Util.ServiceProvider), "ServiceProvider is not initialized");
+                }
+
+                var distributedCache = Util.ServiceProvider.GetRequiredService<IDistributedCache>();
+                // 关键：注入自定义StateDataFormat
+                options.StateDataFormat = new CachedStateDataFormat(distributedCache);
+
+                // 网站应用固定scope snsapi_login，支持PC快速登录
+                options.Scope.Add("snsapi_login");
+
+                // 回调路径，和微信开放平台回调域名匹配
+                options.CallbackPath = "/openid/weixin_login_callback";
+                options.Events.OnRemoteFailure = context =>
+                {
+                    var returnUrl = context.Properties?.Items.TryGetValue(Util.ExternalLoginReturnUrl,
+                        out var value) == true
+                        ? value
+                        : null;
+                    var loginUrl = string.IsNullOrEmpty(openiddictOptions.Issuer)
+                        ? "/account/login"
+                        : $"{openiddictOptions.Issuer.TrimEnd('/')}/account/login";
+                    var query = $"error=external_login_failed";
+                    if (!string.IsNullOrWhiteSpace(returnUrl))
+                    {
+                        query += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+                    }
+
+                    context.Response.Redirect($"{loginUrl}?{query}");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
+                };
+            });
+        }
 
         // 必须在 AddIdentity 之后，不然配置会被覆盖为默认值
         builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme,
@@ -157,9 +220,18 @@ public partial class Program
                         : $"{baseUrl}/connect/authorize?";
                 }
 
-                options.AllowAuthorizationCodeFlow()
-                    .AllowPasswordFlow()
-                    .AllowRefreshTokenFlow();
+                options.AllowAuthorizationCodeFlow();
+                options.AllowRefreshTokenFlow();
+
+                if (loginProviders.Contains(Util.LoginProviderPassword, StringComparer.OrdinalIgnoreCase))
+                {
+                    options.AllowPasswordFlow();
+                }
+
+                if (loginProviders.Contains(Util.LoginProviderSms, StringComparer.OrdinalIgnoreCase))
+                {
+                    options.AllowCustomFlow(PhoneCodeGrantHandler.GrantType);
+                }
 
                 options.AddSigningCredential();
                 options.DisableAccessTokenEncryption();
@@ -180,10 +252,19 @@ public partial class Program
         builder.Services.AddAntiforgery(options =>
         {
             options.HeaderName = "X-XSRF-TOKEN";
-            // options.Cookie.Name = "XSRF-TOKEN";
+            options.Cookie.Name = "X-XSRF-TOKEN";
             // options.Cookie.SameSite = SameSiteMode.Lax;
         });
+
+
         builder.Services.AddControllers();
+        var type = Type.GetType(
+            "Microsoft.AspNetCore.Mvc.ViewFeatures.Filters.AutoValidateAntiforgeryTokenAuthorizationFilter, Microsoft.AspNetCore.Mvc.ViewFeatures");
+        if (type != null)
+        {
+            builder.Services.AddSingleton(type);
+        }
+
         builder.Services.AddRouting(options => options.LowercaseUrls = true);
 
         builder.Services.AddCors(policy => policy
@@ -194,17 +275,26 @@ public partial class Program
             AliYunSmsSender.Name);
         builder.Services.AddKeyedSingleton<ISmsSender, ConsoleSmsSender>(
             ConsoleSmsSender.Name);
+        builder.Services.AddSingleton<ISmsManager, SmsManager>();
 
         using var startupLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
         PluginLoader.Load(builder, startupLoggerFactory);
 
         var app = builder.Build();
 
+        // 开发时，若使用了二级域名
+        Util.BasePath = app.Environment.IsDevelopment()
+            ? (Environment.GetEnvironmentVariable("BASE_PATH") ?? "").TrimEnd('/')
+            : "";
+        Util.ServiceProvider = app.Services;
+
         if (app.Environment.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
         }
 
+        // 【必须在这里，路由之前】
+        // app.UseForwardedHeaders();
         app.UseMiddleware<DecryptRequestMiddleware>();
 
         app.UseHealthChecks("/healthz");

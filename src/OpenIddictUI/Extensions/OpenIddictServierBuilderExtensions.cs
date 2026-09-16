@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace OpenIddictUI;
+namespace OpenIddictUI.Extensions;
 
 public static class OpenIddictServierBuilderExtensions
 {

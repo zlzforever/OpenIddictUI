@@ -1,7 +1,7 @@
 // ============================================================
 // API 请求封装：自动管理 XSRF Token
 // 所有 URL 使用相对路径，由 <base href> 处理网关下级目录
-// 使用 header（而非 cookie）传递 XSRF token
+// 使用 header 传递 XSRF token；验证码状态由服务端 HttpOnly Cookie 自动携带
 // ============================================================
 
 let csrfToken: string | null = null
@@ -16,10 +16,9 @@ async function ensureToken(): Promise<string> {
 }
 
 // POST 请求自动带 XSRF token。服务端返回 "Invalid...token" 时自动刷新 token 重试一次
-export async function apiPost(url: string, body: Record<string, unknown>, captchaId?: string, retry = true): Promise<unknown> {
+export async function apiPost(url: string, body: Record<string, unknown>, retry = true): Promise<unknown> {
   const token = await ensureToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }
-  if (captchaId) headers['Z-CaptchaId'] = captchaId
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
@@ -32,7 +31,7 @@ export async function apiPost(url: string, body: Record<string, unknown>, captch
       const text = await res.text()
       if (text.includes('Invalid') && text.includes('token')) {
         csrfToken = null
-        return apiPost(url, body, captchaId, false)
+        return apiPost(url, body, false)
       }
     } catch { /* ignore parse error */ }
   }
@@ -45,10 +44,9 @@ export async function apiGet(url: string): Promise<unknown> {
   return res.json()
 }
 
-export async function apiPut(url: string, body: Record<string, unknown>, captchaId?: string): Promise<unknown> {
+export async function apiPut(url: string, body: Record<string, unknown>): Promise<unknown> {
   const token = await ensureToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }
-  if (captchaId) headers['Z-CaptchaId'] = captchaId
   const res = await fetch(url, {
     method: 'PUT',
     credentials: 'include',
@@ -58,10 +56,9 @@ export async function apiPut(url: string, body: Record<string, unknown>, captcha
   return res.json()
 }
 
-export async function apiDelete(url: string, captchaId?: string): Promise<unknown> {
+export async function apiDelete(url: string): Promise<unknown> {
   const token = await ensureToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token }
-  if (captchaId) headers['Z-CaptchaId'] = captchaId
   const res = await fetch(url, {
     method: 'DELETE',
     credentials: 'include',

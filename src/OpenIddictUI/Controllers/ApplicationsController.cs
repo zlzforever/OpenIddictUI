@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -45,9 +46,9 @@ public class ApplicationsController(
                 postLogoutRedirectUris = await applicationManager.GetPostLogoutRedirectUrisAsync(app),
                 grantTypes = perms.Where(p => p.StartsWith("gt:")).Select(p => p[3..]).ToList(),
                 scopes = perms.Where(p => p.StartsWith("scp:")).Select(p => p[4..]).ToList(),
-                clientUrl = settings?.GetValueOrDefault("client_url"),
-                clientLogoUrl = settings?.GetValueOrDefault("client_logo_url"),
-                enabled = settings?.GetValueOrDefault("enabled") ?? "true"
+                clientUrl = settings.GetValueOrDefault("client_url"),
+                clientLogoUrl = settings.GetValueOrDefault("client_logo_url"),
+                enabled = settings.GetValueOrDefault("enabled") ?? "true"
             });
         }
 
@@ -87,7 +88,7 @@ public class ApplicationsController(
 
     private static ApiResult? ValidateApplicationInput(ApplicationInput input)
     {
-        var err = (int code, string msg) => ApiResult.Error(code, msg);
+        var err = ApiResult.Error;
 
         if (input.ClientType == "public" && !string.IsNullOrEmpty(input.ClientSecret))
             return err(Errors.InvalidRequest.Code, "public 客户端不能设置 ClientSecret");
@@ -181,6 +182,7 @@ public class ApplicationsController(
     private bool IsAdmin() => User.Identity?.Name == "admin";
 }
 
+[SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
 public class ApplicationInput
 {
     [Required, StringLength(100)] public string ClientId { get; set; } = string.Empty;

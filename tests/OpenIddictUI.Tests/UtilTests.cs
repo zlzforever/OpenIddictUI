@@ -3,9 +3,10 @@ namespace OpenIddictUI.Tests;
 public class UtilTests
 {
     [Fact]
-    public void CaptchaIdHeader_Constant_IsCorrect()
+    public void CaptchaCookieNames_AreCorrect()
     {
-        Util.CaptchaIdHeader.Should().Be("Z-CaptchaId");
+        Util.CaptchaImageCookie.Should().Be("openidui-captcha-image");
+        Util.CaptchaSliderCookie.Should().Be("openidui-captcha-slider");
     }
 
     [Fact]
@@ -33,7 +34,7 @@ public class UtilTests
     public void SmsRateLimit_FormatsCorrectly()
     {
         var key = string.Format(Util.SmsRateLimit, "13800138000");
-        key.Should().Be("SMS:RateLimit:13800138000");
+        key.Should().Be("SMS:RateLimit:v2:13800138000");
     }
 
     [Fact]

@@ -74,7 +74,7 @@ public class InputValidationTests
     [Fact]
     public void SendCodeInput_Valid_Succeeds()
     {
-        var m = new SendCodeInput { PhoneNumber = "13800138000", CaptchaCode = "ABC" };
+        var m = new SendCodeInput { PhoneNumber = "13800138000" };
         var errors = Validate(m);
         errors.Should().BeEmpty();
     }
@@ -88,11 +88,27 @@ public class InputValidationTests
     }
 
     [Fact]
-    public void SendCodeInput_CaptchaCodeNull_StillValid()
+    public void ExternalBindingCodeInput_Valid_Succeeds()
     {
-        var m = new SendCodeInput { PhoneNumber = "13800138000", CaptchaCode = null };
-        var errors = Validate(m);
-        errors.Should().BeEmpty(); // CaptchaCode 没有 [Required]
+        var m = new ExternalBindingCodeInput
+        {
+            PhoneNumber = "13800138000", CountryCode = "+86"
+        };
+        Validate(m).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ExternalBindingCodeInput_EmptyPhone_FailsValidation()
+    {
+        var m = new ExternalBindingCodeInput { PhoneNumber = "" };
+        Validate(m).Should().Contain(e => e.MemberNames.Contains("PhoneNumber"));
+    }
+
+    [Fact]
+    public void ExternalBindingInput_EmptyVerifyCode_FailsValidation()
+    {
+        var m = new ExternalBindingInput { PhoneNumber = "13800138000", VerifyCode = "" };
+        Validate(m).Should().Contain(e => e.MemberNames.Contains("VerifyCode"));
     }
 
     [Fact]
