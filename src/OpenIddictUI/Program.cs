@@ -1,8 +1,10 @@
 using Identity.Sm;
+using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.AspNetCore.WebUtilities;
 using MySqlConnector;
 using OpenIddictUI.Data;
 using OpenIddictUI.Extensions;
@@ -70,10 +72,17 @@ public partial class Program
 
         // builder.Services.Configure<ForwardedHeadersOptions>(options =>
         // {
-        //     options.ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
-        //     // 信任代理IP，生产填写你的网关/nginx内网IP
-        //     options.KnownProxies.Add(IPAddress.Parse(Environment.GetEnvironmentVariable("TRUSTED_PROXY_IP") ??
-        //                                              "127.0.0.1"));
+        //     options.ForwardedHeaders =
+        //         ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+        //
+        //     // Dapr sidecar 通常与应用处于同一 Pod，默认信任本机回环地址；跨节点部署时通过环境变量指定。
+        //     var trustedProxyIp = Environment.GetEnvironmentVariable("TRUSTED_PROXY_IP") ?? "127.0.0.1";
+        //     if (!IPAddress.TryParse(trustedProxyIp, out var proxyIp))
+        //     {
+        //         throw new InvalidOperationException($"TRUSTED_PROXY_IP 不是有效的 IP 地址：{trustedProxyIp}");
+        //     }
+        //
+        //     options.KnownProxies.Add(proxyIp);
         // });
 
         RegisterDbContext(builder, databaseProvider, connectionString, migrationsTable);
@@ -121,6 +130,25 @@ public partial class Program
                 options.ClientSecret = weixinSettings.AppSecret;
                 options.SignInScheme = IdentityConstants.ExternalScheme;
 
+                var configuredRedirectBase = config["WEIXIN_REDIRECT_BASE"];
+                if (string.IsNullOrWhiteSpace(configuredRedirectBase))
+                {
+                    configuredRedirectBase = weixinSettings.RedirectBaseUri;
+                }
+
+                Uri? redirectBaseUri = null;
+                if (!string.IsNullOrWhiteSpace(configuredRedirectBase) &&
+                    (!Uri.TryCreate(configuredRedirectBase, UriKind.Absolute, out redirectBaseUri) ||
+                     (redirectBaseUri.Scheme != Uri.UriSchemeHttp && redirectBaseUri.Scheme != Uri.UriSchemeHttps)))
+                {
+                    throw new InvalidOperationException(
+                        "Weixin:RedirectUri/WEIXIN_REDIRECT_URI 必须是 http 或 https 的绝对地址");
+                }
+
+                var publicIssuer = Uri.TryCreate(openiddictOptions.Issuer, UriKind.Absolute, out var issuerUri)
+                    ? issuerUri
+                    : null;
+
                 if (Util.ServiceProvider == null)
                 {
                     throw new ArgumentNullException(nameof(Util.ServiceProvider), "ServiceProvider is not initialized");
@@ -135,6 +163,22 @@ public partial class Program
 
                 // 回调路径，和微信开放平台回调域名匹配
                 options.CallbackPath = "/openid/weixin_login_callback";
+                options.Events.OnRedirectToAuthorizationEndpoint = context =>
+                {
+                    if (redirectBaseUri != null)
+                    {
+                        context.RedirectUri = ReplaceRedirectOrigin(
+                            context.RedirectUri, redirectBaseUri);
+                    }
+                    else if (publicIssuer != null)
+                    {
+                        // 未配置精确回调地址时，只使用公网 Issuer 替换内部请求的 scheme/host，保留回调路径。
+                        context.RedirectUri = ReplaceRedirectOrigin(context.RedirectUri, publicIssuer);
+                    }
+
+                    context.Response.Redirect(context.RedirectUri);
+                    return Task.CompletedTask;
+                };
                 options.Events.OnRemoteFailure = context =>
                 {
                     var returnUrl = context.Properties?.Items.TryGetValue(Util.ExternalLoginReturnUrl,
@@ -293,7 +337,7 @@ public partial class Program
             app.UseDeveloperExceptionPage();
         }
 
-        // 【必须在这里，路由之前】
+        // 【必须在这里，路由之前】否则 OAuth redirect_uri 会读取到 Dapr 的内部地址。
         // app.UseForwardedHeaders();
         app.UseMiddleware<DecryptRequestMiddleware>();
 
@@ -319,6 +363,53 @@ public partial class Program
         PluginLoader.Use(app, app.Services.GetRequiredService<ILoggerFactory>());
 
         return app;
+    }
+
+    private static string ReplaceQueryValue(string uri, string key, string value)
+    {
+        var uriBuilder = new UriBuilder(uri);
+        var query = QueryHelpers.ParseQuery(uriBuilder.Query)
+            .ToDictionary(item => item.Key, item => (string?)item.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        query[key] = value;
+        uriBuilder.Query = QueryHelpers.AddQueryString(string.Empty, query).TrimStart('?');
+        return uriBuilder.Uri.AbsoluteUri;
+    }
+
+    private static string ReplaceRedirectOrigin(string authorizationUri, Uri publicIssuer)
+    {
+        var uriBuilder = new UriBuilder(authorizationUri);
+        var query = QueryHelpers.ParseQuery(uriBuilder.Query)
+            .ToDictionary(item => item.Key, item => (string?)item.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+
+        if (!query.TryGetValue("redirect_uri", out var redirectUri) ||
+            !Uri.TryCreate(redirectUri, UriKind.Absolute, out var callbackUri))
+        {
+            return authorizationUri;
+        }
+
+        var callbackBuilder = new UriBuilder(callbackUri)
+        {
+            Scheme = publicIssuer.Scheme,
+            Host = publicIssuer.Host,
+            Port = publicIssuer.IsDefaultPort ? -1 : publicIssuer.Port
+        };
+        query["redirect_uri"] = callbackBuilder.Uri.AbsoluteUri;
+        uriBuilder.Query = QueryHelpers.AddQueryString(string.Empty, query).TrimStart('?');
+        return uriBuilder.Uri.AbsoluteUri;
+    }
+
+    private static bool HasLocalRedirectOrigin(string authorizationUri)
+    {
+        var uriBuilder = new UriBuilder(authorizationUri);
+        var query = QueryHelpers.ParseQuery(uriBuilder.Query);
+        if (!query.TryGetValue("redirect_uri", out var redirectUri) ||
+            !Uri.TryCreate(redirectUri.ToString(), UriKind.Absolute, out var callbackUri))
+        {
+            return false;
+        }
+
+        return callbackUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+               (IPAddress.TryParse(callbackUri.Host, out var ip) && IPAddress.IsLoopback(ip));
     }
 
     private static void RegisterCache(WebApplicationBuilder builder, DatabaseProvider databaseProvider,

@@ -103,12 +103,14 @@ public class AccountControllerTests
 
         var url = $"/account/external-login?provider=WEIXIN&returnUrl={returnUrl}";
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("X-Forwarded-Host", "a.com");
+ 
         var response = await Client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.Host.Should().Be("open.weixin.qq.com");
 
         var location = response.Headers.Location.ToString();
+        var query = HttpUtility.ParseQueryString(response.Headers.Location.Query);
+        query["redirect_uri"].Should().Be("https://a.com/openid/weixin_login_callback");
         // https://open.weixin.qq.com/connect/qrconnect?appid=wx035a915c40dc3588&scope=snsapi_login,snsapi_userinfo&response_type=code&redirect_uri=http://localhost/openid/signin-weixin&state=CfDJ8AXVtWCBGZRCiy6ANCUvMAoKikW9rCvPTXmRRvmwNaRBiKPMdvt5_UpukTYjK0y0COqxViFMRIbFc2cbJLiHnb2aNvqo1sW4UoqOoniOR24eaoXCde15D6XuTNZMKs3QtyfBd4Z99W1_GipkxXyvmB8pDo9TlUHqPafX8mYAQf7BrPvX9mZnH1blyWA8Oe_Gnnhaxnbz5oevXrzR2cUDf6NiGPvx4xESS91jr9nGDqB8m3oOJ5UucABcnfNmdVKJ1UzK-RH1obYe_UE2RhZK1L4So0A6-S3yT5wxvHVXRXjEcPXR0ATzKU03ZhhGwNqYcbk6K1yU3Fke_Ch-LClW-RTkXI3gCZaqiqYsuul-ZL6cv-0gpT72PRMwTi-Nl8kF6hY1MySiXMG2uJrY5qd7n6Kp3VlnoHpQTDrj6BL9zF6t2wnP2cCDYm9Mce_PdZt3dg
     }
 
