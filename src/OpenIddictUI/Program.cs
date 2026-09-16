@@ -107,7 +107,7 @@ public partial class Program
         var loginProviders = builder.Configuration.Get<GlobalOptions>()?.AuthenticationSchemes;
         if (loginProviders != null &&
             loginProviders.Any(provider =>
-                string.Equals(provider?.Trim(), Util.LoginProviderWeixin, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(provider.Trim(), Util.LoginProviderWeixin, StringComparison.OrdinalIgnoreCase)))
         {
             var weixinSettings = builder.Configuration.GetSection("Weixin").Get<WeixinOptions>();
             if (weixinSettings == null)
@@ -276,16 +276,16 @@ public partial class Program
         builder.Services.AddKeyedSingleton<ISmsSender, ConsoleSmsSender>(
             ConsoleSmsSender.Name);
         builder.Services.AddSingleton<ISmsManager, SmsManager>();
+        builder.Services.Configure<AliYunOptions>(config.GetSection("AliYun"));
 
         using var startupLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
         PluginLoader.Load(builder, startupLoggerFactory);
 
         var app = builder.Build();
 
-        // 开发时，若使用了二级域名
-        Util.BasePath = app.Environment.IsDevelopment()
-            ? (Environment.GetEnvironmentVariable("BASE_PATH") ?? "").TrimEnd('/')
-            : "";
+        // 读取反向代理使用的二级路径；容器 Production 环境同样需要该前缀。
+        var basePath = (Environment.GetEnvironmentVariable("BASE_PATH") ?? "").Trim().Trim('/');
+        Util.BasePath = string.IsNullOrEmpty(basePath) ? "" : $"/{basePath}";
         Util.ServiceProvider = app.Services;
 
         if (app.Environment.IsDevelopment())
