@@ -185,7 +185,7 @@ async function submitChangePwd() {
   } else {
     pwdMsg.value = data.message || t('changePassword.failed')
     pwdOk.value = false
-    refreshPwdCaptcha()
+    await refreshPwdCaptcha()
   }
 }
 

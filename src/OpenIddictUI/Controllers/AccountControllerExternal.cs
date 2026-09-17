@@ -344,7 +344,7 @@ public partial class AccountController
         }
 
         var ticketId = Guid.CreateVersion7().ToString("N");
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var expiresAt = DateTimeOffset.Now.AddMinutes(5);
         var ticket = new ExternalBindingTicket(
             info.LoginProvider,
             info.ProviderKey,
@@ -380,7 +380,7 @@ public partial class AccountController
 
         var ticket = await hybridCache.GetOnlyAsync<ExternalBindingTicket>(cacheKey);
 
-        if (ticket != null && ticket.ExpiresAt > DateTimeOffset.UtcNow)
+        if (ticket != null && ticket.ExpiresAt > DateTimeOffset.Now)
         {
             return (token, ticket);
         }
@@ -392,7 +392,7 @@ public partial class AccountController
     private async Task SaveExternalBindingTicketAsync(string token, ExternalBindingTicket ticket)
     {
         await hybridCache.SetAsync(GetExternalBindingCacheKey(token), ticket,
-            new HybridCacheEntryOptions { Expiration = ticket.ExpiresAt - DateTimeOffset.UtcNow });
+            new HybridCacheEntryOptions { Expiration = ticket.ExpiresAt - DateTimeOffset.Now });
     }
 
     private async Task ClearExternalBindingTicketAsync(string token)

@@ -53,7 +53,7 @@ public static class OpenIddictServierBuilderExtensions
             padding: RSASignaturePadding.Pkcs1);
 
         // 设置证书有效期（10年）
-        var notBefore = DateTimeOffset.UtcNow;
+        var notBefore = DateTimeOffset.Now;
         var notAfter = notBefore.AddYears(100);
 
         // 创建自签名证书

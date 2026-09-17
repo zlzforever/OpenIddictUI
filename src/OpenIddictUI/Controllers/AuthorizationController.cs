@@ -123,7 +123,7 @@ public class AuthorizationController(
 
         // ⑤ 检查 max_age 参数：如果客户端要求认证时长不超过 X 秒，而当前会话已超时
         if (request.MaxAge != null && result.Properties?.IssuedUtc != null &&
-            DateTimeOffset.UtcNow - result.Properties.IssuedUtc > TimeSpan.FromSeconds(request.MaxAge.Value))
+            DateTimeOffset.Now - result.Properties.IssuedUtc > TimeSpan.FromSeconds(request.MaxAge.Value))
         {
             if (request.HasPromptValue(PromptValues.None))
             {
