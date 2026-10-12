@@ -48,6 +48,7 @@ export async function getExternalBindingStatus() {
         code: number
         success: boolean
         message?: string
+        data?: { openid?: string }
     }>
 }
 

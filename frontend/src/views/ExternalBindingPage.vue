@@ -5,6 +5,11 @@
       <p>{{ $t('externalBinding.subTitle') }}</p>
     </div>
 
+    <div v-if="openid" class="external-openid">
+      <span class="external-openid-label">{{ $t('externalBinding.openid') }}</span>
+      <code>{{ openid }}</code>
+    </div>
+
     <div v-if="message" :class="['alert', messageOk ? 'alert-success' : 'alert-danger', 'visible']">
       {{ message }}
     </div>
@@ -72,6 +77,7 @@ const loading = ref(true)
 const available = ref(false)
 const message = ref('')
 const messageOk = ref(false)
+const openid = ref('')
 const phone = ref('')
 const verifyCode = ref('')
 const sending = ref(false)
@@ -90,6 +96,7 @@ async function load() {
     }
 
     available.value = true
+    openid.value = status.data?.openid || ''
   } catch {
     message.value = t('externalBinding.loadFailed')
   } finally {
@@ -188,6 +195,13 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 .binding-card { max-width: 460px; margin: 0 auto; }
 .binding-loading, .binding-expired { text-align: center; color: var(--text-muted); }
 .binding-expired p { margin-bottom: 1rem; }
+.external-openid {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  margin-bottom: 1.25rem; padding: 0.75rem;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius);
+}
+.external-openid-label { color: var(--text-muted); font-size: 0.8125rem; }
+.external-openid code { color: var(--text); font-family: var(--font-mono, monospace); word-break: break-all; }
 .alert-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
 .sms-send-wrap { position: relative; }
 .sms-send-wrap .form-control { padding-right: 100px; }

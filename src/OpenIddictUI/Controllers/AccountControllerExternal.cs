@@ -149,7 +149,8 @@ public partial class AccountController
             return Ok(Errors.ExternalBindingExpiredResult);
         }
 
-        return Ok(ApiResult.Ok());
+        // 将外部身份标识返回给当前绑定页面，便于短信异常时提供给管理员人工处理。
+        return Ok(ApiResult.Ok(data: new { openid = binding.Value.Ticket.ProviderKey }));
     }
 
     private async Task<IActionResult> SendExternalBindingCode(string countryCode, string phoneNumber,

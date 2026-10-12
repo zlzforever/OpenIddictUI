@@ -43,6 +43,7 @@ export default {
     title: '绑定外部账号',
     subTitle: '请验证已有账号后完成绑定',
     loading: '正在验证绑定状态...',
+    openid: '微信 OpenID',
     phone: '手机号',
     phonePlaceholder: '请输入已注册手机号',
     smsCode: '短信验证码',

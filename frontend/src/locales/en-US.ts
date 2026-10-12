@@ -43,6 +43,7 @@ export default {
     title: 'Bind External Account',
     subTitle: 'Verify your existing account to finish binding',
     loading: 'Checking binding status...',
+    openid: 'WeChat OpenID',
     phone: 'Phone Number',
     phonePlaceholder: 'Enter your registered phone number',
     smsCode: 'SMS Code',
