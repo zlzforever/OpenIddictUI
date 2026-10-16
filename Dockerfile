@@ -13,11 +13,11 @@ WORKDIR /app
 COPY *.slnx ./
 COPY src/OpenIddictUI/OpenIddictUI.csproj ./src/OpenIddictUI/
 COPY src/OpenIddictUI.Api/OpenIddictUI.Api.csproj ./src/OpenIddictUI.Api/
-RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj
+RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj /p:RuntimeIdentifier=linux-x64
 
 COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained /p:PublishTrimmed=true -c Release -o /out --no-restore
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained /p:PublishTrimmed=true /p:RuntimeIdentifier=linux-x64 -c Release -o /out --no-restore
 RUN rm -rf /out/appsettings.Development.json
 #RUN if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux-x64' -exec rm -rf {} +; fi
 
