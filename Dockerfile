@@ -28,15 +28,16 @@ ENV LANG zh_CN.UTF-8
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
-# 创建非root用户，安全最佳实践
-RUN adduser --disabled-password --gecos "" appuser
-USER appuser
-
 RUN apt-get update &&\
     apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY TimesNewRoman.ttf /usr/share/fonts/truetype/deng/
 COPY --from=backend /out ./
+
+# 创建非root用户，安全最佳实践
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["./OpenIddictUI"]
