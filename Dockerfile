@@ -13,14 +13,14 @@ WORKDIR /app
 COPY *.slnx ./
 COPY src/OpenIddictUI/OpenIddictUI.csproj ./src/OpenIddictUI/
 COPY src/OpenIddictUI.Api/OpenIddictUI.Api.csproj ./src/OpenIddictUI.Api/
-# restore 指定RID，下载linux-x64 runtime pack
-RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj /p:RuntimeIdentifier=linux-x64
+# restore 指定RID，下载linux-x64 runtime pack（restore 忽略 /p:RuntimeIdentifier，必须用 -r）
+RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj -r linux-x64
 
 COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
 
 # ✅ --self-contained true 完整写法
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained true /p:PublishTrimmed=true /p:RuntimeIdentifier=linux-x64 -c Release -o /out --no-restore
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained true /p:RuntimeIdentifier=linux-x64 -c Release -o /out
 
 RUN rm -rf /out/appsettings.Development.json
 #RUN if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux-x64' -exec rm -rf {} +; fi
