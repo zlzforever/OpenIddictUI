@@ -34,10 +34,7 @@ EXPOSE 8080
 
 # 安装依赖 + 中文locale + 字体工具
 RUN apt-get update &&\
-    apt-get install -y fontconfig iputils-ping net-tools curl locales && \
-    sed -i 's/^# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen && \
-    locale-gen && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* 
+    apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
 
 # 设置环境变量（locale生成完成后再设置）
 ENV LANG=zh_CN.UTF-8
