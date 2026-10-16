@@ -48,14 +48,13 @@ RUN mkdir -p /usr/share/fonts/truetype/deng
 COPY TimesNewRoman.ttf /usr/share/fonts/truetype/deng/
 RUN fc-cache -fv
 
-# 拷贝 .NET 自包含应用产物
-COPY --from=backend /out ./
+# 创建appuser（需在COPY前创建，--chown才能引用用户名）
+RUN adduser --disabled-password --gecos "" appuser
 
-# 创建appuser，并且授权/app目录给appuser（解决读写日志/临时文件权限）
-RUN adduser --disabled-password --gecos "" appuser && \
-    chown -R appuser:appuser /app 
+# 拷贝 .NET 自包含应用产物，拷贝时直接设置属主（避免 chown -R 复制整层，镜像体积翻倍）
+COPY --chown=appuser:appuser --from=backend /out ./
 
-# 切换到非root用户    
+# 切换到非root用户
 USER appuser
 
 ENTRYPOINT ["docker-entrypoint.sh"]
