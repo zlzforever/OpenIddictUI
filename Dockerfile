@@ -17,16 +17,21 @@ RUN dotnet restore src/OpenIddictUI/OpenIddictUI.csproj
 
 COPY src/ ./src/
 COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj -c Release -o /out --no-restore
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained /p:PublishTrimmed=true -c Release -o /out --no-restore
 RUN rm -rf /out/appsettings.Development.json
-RUN if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux-x64' -exec rm -rf {} +; fi
+#RUN if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux-x64' -exec rm -rf {} +; fi
 
-# stage 3: 运行时
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+# stage 3
+FROM debian:bookworm-slim
 WORKDIR /app
 ENV LANG zh_CN.UTF-8
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
+
+# 创建非root用户，安全最佳实践
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
 RUN apt-get update &&\
     apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -34,4 +39,4 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY TimesNewRoman.ttf /usr/share/fonts/truetype/deng/
 COPY --from=backend /out ./
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["dotnet", "OpenIddictUI.dll"]
+CMD ["./OpenIddictUI"]

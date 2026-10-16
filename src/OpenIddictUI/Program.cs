@@ -26,7 +26,12 @@ public partial class Program
         var app = CreateWebApplication(args);
 
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
         logger.LogInformation("OpenIddictUI starting");
+        if (GC.GetConfigurationVariables().ContainsKey("SatoriGC"))
+        {
+            logger.LogInformation("Use SatoriGC");
+        }
 
         await SeedData.ApplyAsync(app.Services);
         await app.RunAsync();
