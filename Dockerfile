@@ -49,7 +49,7 @@ RUN echo "deb http://mirrors.aliyun.com/debian bookworm main non-free-firmware" 
 # 注意：Debian 的 locale-gen 不接受参数（Ubuntu 才支持），必须先取消
 # /etc/locale.gen 中的注释再执行无参 locale-gen，否则不会生成任何 locale
 RUN apt-get update &&\
-    apt-get install -y fontconfig locales libicu72 libssl3  &&\
+    apt-get install -y fontconfig locales libicu72 libssl3 ca-certificates  &&\
     sed -i 's/^# *\(zh_CN.UTF-8 UTF-8\)/\1/' /etc/locale.gen &&\
     locale-gen &&\
     apt-get clean && rm -rf /var/lib/apt/lists/*
