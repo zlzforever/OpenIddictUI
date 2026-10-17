@@ -46,10 +46,15 @@ RUN echo "deb http://mirrors.aliyun.com/debian bookworm main non-free-firmware" 
 
 
 # 安装依赖 + 中文locale + 字体工具
+# 注意：Debian 的 locale-gen 不接受参数（Ubuntu 才支持），必须先取消
+# /etc/locale.gen 中的注释再执行无参 locale-gen，否则不会生成任何 locale
 RUN apt-get update &&\
     apt-get install -y fontconfig locales libicu72 libssl3  &&\
-    locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 &&\
+    sed -i 's/^# *\(zh_CN.UTF-8 UTF-8\)/\1/' /etc/locale.gen &&\
+    locale-gen &&\
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
