@@ -32,13 +32,17 @@ WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
+# 阿里云 bookworm deb822 源（echo -e 单行方案，兼容所有docker版本）
+RUN echo "deb http://mirrors.aliyun.com/debian bookworm main non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian bookworm-updates main non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main non-free-firmware" >> /etc/apt/sources.list && \
+    rm -f /etc/apt/sources.list.d/debian.sources
+
+
 # 安装依赖 + 中文locale + 字体工具
 RUN apt-get update &&\
-    apt-get install -y fontconfig iputils-ping net-tools curl && apt-get clean
-
-# 设置环境变量（locale生成完成后再设置）
-ENV LANG=zh_CN.UTF-8
-ENV LC_ALL=zh_CN.UTF-8
+    apt-get install -y fontconfig locales libicu72 libssl3  &&\
+    locale-gen zh_CN.UTF-8 && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

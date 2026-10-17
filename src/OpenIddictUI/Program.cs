@@ -28,10 +28,8 @@ public partial class Program
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
         logger.LogInformation("OpenIddictUI starting");
-        if (GC.GetConfigurationVariables().ContainsKey("SatoriGC"))
-        {
-            logger.LogInformation("Use SatoriGC");
-        }
+        logger.LogInformation(
+            GC.GetConfigurationVariables().ContainsKey("SatoriGC") ? "Use SatoriGC" : "Use default GC");
 
         await SeedData.ApplyAsync(app.Services);
         await app.RunAsync();

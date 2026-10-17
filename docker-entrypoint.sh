@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 容器启动时设置中文locale
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+
 set -e
 
 # 在这里添加你需要执行的命令
