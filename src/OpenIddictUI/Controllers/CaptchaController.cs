@@ -24,22 +24,21 @@ public class CaptchaController(
 
     static CaptchaController()
     {
-        CaptchaTypeface = SKTypeface.Default;
-        if (CaptchaTypeface != null)
+        // 优先加载容器内的TimesNewRoman.ttf；本地开发（无该字体文件）fallback Default
+        // 注意：字体路径是根路径，不能与 AppContext.BaseDirectory 做 Path.Combine（Combine 遇到根路径会直接返回后者）
+        var fontPath = "/usr/share/fonts/truetype/deng/TimesNewRoman.ttf";
+        if (!System.IO.File.Exists(fontPath))
         {
-            return;
+            fontPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TimesNewRoman.ttf");
         }
 
-        // 优先读取容器内的TimesNewRoman.ttf；本地开发 fallback Default
-        var fontPath = Path.Combine(AppContext.BaseDirectory, "/usr/share/fonts/truetype/deng/TimesNewRoman.ttf");
-        if (System.IO.File.Exists(fontPath))
-        {
-            CaptchaTypeface = SKTypeface.FromFile(fontPath);
-        }
+        CaptchaTypeface = System.IO.File.Exists(fontPath)
+            ? SKTypeface.FromFile(fontPath)
+            : SKTypeface.Default;
 
         // 打印日志确认
         Console.WriteLine(
-            $"[FONT INIT] IsEmpty:{CaptchaTypeface?.IsEmpty ?? false}, Family:{CaptchaTypeface?.FamilyName}");
+            $"[FONT INIT] IsEmpty:{CaptchaTypeface.IsEmpty}, Family:{CaptchaTypeface.FamilyName}");
     }
 
     // ---- 图形验证码 ----
