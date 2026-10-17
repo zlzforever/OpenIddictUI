@@ -24,7 +24,7 @@ COPY --from=frontend /app/src/OpenIddictUI/wwwroot ./src/OpenIddictUI/wwwroot
 # 单独的 rm 层不会减小镜像体积，文件仍存在于前一层中（与 chown 同理）
 # Satori 包会带出 ~256MB 原生调试符号（libcoreclr.so.dbg 等），生产无用
 # 部分包会把多平台原生库放进 runtimes/，只保留 linux 相关（如 SkiaSharp）
-RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained true /p:RuntimeIdentifier=linux-x64 -c Release -o /out && \
+RUN dotnet publish src/OpenIddictUI/OpenIddictUI.csproj --self-contained true /p:RuntimeIdentifier=linux-x64 /p:PublishReadyToRun=true -c Release -o /out && \
     rm -rf /out/appsettings.Development.json && \
     find /out \( -name '*.dbg' -o -name '*.dwarf' \) -delete && \
     if [ -d /out/runtimes ]; then find /out/runtimes -mindepth 1 -maxdepth 1 ! -name 'linux*' -exec rm -rf {} +; fi
