@@ -161,8 +161,23 @@ public partial class Program
                 // 关键：注入自定义StateDataFormat
                 options.StateDataFormat = new CachedStateDataFormat(distributedCache);
 
-                // 网站应用固定scope snsapi_login，支持PC快速登录
-                options.Scope.Add("snsapi_login");
+                // scope 以配置文件为准：清空第三方库默认 scope（含 snsapi_userinfo），
+                // 只写入 Weixin:Scopes 配置，避免授权链接出现多余的 scope=snsapi_login,snsapi_userinfo
+                options.Scope.Clear();
+                var configuredScopes = weixinSettings.Scopes
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim())
+                    .ToList();
+                // scope 为空会导致微信授权链接无效，启动期直接失败优于运行期不可用
+                if (configuredScopes.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Weixin:Scopes 配置不能为空（微信授权至少需要一个 scope，如 snsapi_login）");
+                }
+                foreach (var scope in configuredScopes)
+                {
+                    options.Scope.Add(scope);
+                }
 
                 // 回调路径，和微信开放平台回调域名匹配
                 options.CallbackPath = "/openid/weixin_login_callback";
