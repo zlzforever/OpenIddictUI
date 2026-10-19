@@ -47,6 +47,8 @@ public abstract class BaseGrantHandler : IGrantHandler
     {
         Claims.Name or Claims.PreferredUsername or Claims.Email or Claims.PhoneNumber
             => [Destinations.AccessToken, Destinations.IdentityToken],
+        Claims.GivenName or Claims.FamilyName
+            => [Destinations.AccessToken, Destinations.IdentityToken],
         Claims.Role => [Destinations.AccessToken, Destinations.IdentityToken],
         _ => [Destinations.AccessToken]
     };
