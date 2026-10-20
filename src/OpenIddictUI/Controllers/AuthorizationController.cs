@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -310,12 +311,45 @@ public class AuthorizationController(
 
     /// <summary>
     /// 获取当前请求的完整 URI（用于 returnUrl 参数）
+    /// 注意：会剥离 prompt 中的 login 值 — 若 returnUrl 仍携带 prompt=login，
+    /// 重新登录回到 authorize 后会再次触发强制登出分支，造成登录页与 authorize 之间的无限重定向
     /// </summary>
     private string GetRequestUri()
     {
-        var path = Request.PathBase + Request.Path + Request.QueryString;
+        // 逐参数重建查询串，仅对 prompt 参数做特殊处理：剔除其中的 login 指令
+        // （prompt 可能包含多个空格分隔的指令，如 "login consent"，需保留其余指令）
+        var query = new StringBuilder();
+        foreach (var (key, values) in Request.Query)
+        {
+            foreach (var value in values)
+            {
+                if (value == null)
+                {
+                    continue;
+                }
+
+                var finalValue = value;
+                if (string.Equals(key, "prompt", StringComparison.OrdinalIgnoreCase))
+                {
+                    var kept = value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                        .Where(v => !string.Equals(v, PromptValues.Login, StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    // login 被剔除后 prompt 为空 → 整个参数移除
+                    if (kept.Length == 0)
+                    {
+                        continue;
+                    }
+                    finalValue = string.Join(' ', kept);
+                }
+
+                query.Append(query.Length == 0 ? '?' : '&');
+                query.Append(Uri.EscapeDataString(key)).Append('=').Append(Uri.EscapeDataString(finalValue));
+            }
+        }
+
+        var path = Request.PathBase + Request.Path;
         var issuer = options.Value.Issuer;
-        return !string.IsNullOrEmpty(issuer) ? $"{issuer.TrimEnd('/')}{path}" : path;
+        return !string.IsNullOrEmpty(issuer) ? $"{issuer.TrimEnd('/')}{path}{query}" : $"{path}{query}";
     }
 
     private RedirectResult RedirectToLogin(string returnUrl)
