@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
@@ -74,6 +75,9 @@ public class PhoneCodeGrantHandler : BaseGrantHandler
         }
 
         var principal = await signInManager.CreateUserPrincipalAsync(user);
+        // Identity 生成的 ClaimTypes.NameIdentifier 长名出站映射后同样输出为 sub，
+        // 与下方显式写入的短名 sub 同名将变数组，与 authorize/password 流程对齐，签发前显式移除
+        principal.RemoveClaims(ClaimTypes.NameIdentifier);
         principal.SetClaim(Claims.Subject, await userManager.GetUserIdAsync(user));
         // name 一律取用户名（消除声明表昵称重复导致的数组）；业务表 name 列写入 family_name
         Util.NormalizeNameClaims(principal, user);
