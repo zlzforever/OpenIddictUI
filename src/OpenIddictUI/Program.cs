@@ -28,6 +28,8 @@ public partial class Program
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
         logger.LogInformation("OpenIddictUI starting");
+        // 输出构建指纹（版本 + Git 提交哈希 + DLL SHA256），便于确认运行环境的部署版本是否匹配
+        logger.LogInformation("Build fingerprint: {Fingerprint}", BuildInfo.Describe());
         logger.LogInformation(
             GC.GetConfigurationVariables().ContainsKey("SatoriGC") ? "Use SatoriGC" : "Use default GC");
 
