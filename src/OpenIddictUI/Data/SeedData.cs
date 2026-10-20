@@ -56,7 +56,9 @@ public static class SeedData
             {
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
-                Permissions.Endpoints.EndSession
+                Permissions.Endpoints.EndSession,
+                // 吊销端点：统一授予（吊销处理器只校验 ep:revocation + token 归属，与 grant type 无关）
+                Permissions.Endpoints.Revocation
             };
 
             foreach (var gt in c.GrantTypes)

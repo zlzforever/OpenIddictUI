@@ -158,6 +158,11 @@ public class ApplicationsController(
         if (input.PostLogoutRedirectUris is { Count: > 0 })
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
 
+        // revocation（RFC 7009）：所有客户端统一授予
+        // 吊销处理器只校验 ep:revocation 权限 + token 归属，不校验 grant type（最小权限）
+        // 注意：缺少此权限时吊销请求会被拒 unauthorized_client（事件 6116）
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Revocation);
+
         // public 客户端强制 PKCE
         if (isPublic || input.RequirePkce)
             descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);

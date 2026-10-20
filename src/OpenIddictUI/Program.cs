@@ -250,7 +250,9 @@ public partial class Program
                 options.SetAuthorizationEndpointUris("/connect/authorize")
                     .SetTokenEndpointUris("/connect/token")
                     .SetEndSessionEndpointUris("/connect/logout")
-                    .SetUserInfoEndpointUris("/connect/userinfo");
+                    .SetUserInfoEndpointUris("/connect/userinfo")
+                    // 吊销端点（RFC 7009）：由 OpenIddict 原生处理，不启用 Passthrough（无需自定义吊销逻辑）
+                    .SetRevocationEndpointUris("/connect/revocation");
 
                 var issuer = openiddictOptions.Issuer;
                 if (!string.IsNullOrEmpty(issuer))
@@ -274,6 +276,8 @@ public partial class Program
                                     new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/.well-known/jwks");
                                 context.Response["userinfo_endpoint"] =
                                     new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/userinfo");
+                                context.Response["revocation_endpoint"] =
+                                    new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/revocation");
                                 return default;
                             }));
                     // 一次性设置 returnUrl 白名单前缀，后续请求不再拼接
