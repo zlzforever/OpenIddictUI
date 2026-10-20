@@ -141,9 +141,13 @@ public class AuthorizationController(
         }
 
         // ⑥ 处理 prompt=login — 强制重新认证：先清除当前会话，再跳转登录页
+        // 必须显式指定 IdentityConstants.ApplicationScheme：
+        // AddIdentity 只设置了 DefaultSignInScheme = ExternalScheme（第三方登录临时 cookie），
+        // 未设置 DefaultSignOutScheme（回退到 DefaultSignInScheme），
+        // 因此不带 scheme 的 SignOutAsync() 只会清除 external cookie，SSO 主 cookie 不会被删除
         if (request.HasPromptValue(PromptValues.Login))
         {
-            await HttpContext.SignOutAsync();
+            await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
             return RedirectToLogin(GetRequestUri());
         }
 
