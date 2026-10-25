@@ -61,7 +61,7 @@ public class PasswordGrantHandler : BaseGrantHandler
         var principal = await signInManager.CreateUserPrincipalAsync(user);
         principal.RemoveClaims(ClaimTypes.NameIdentifier);
         principal.SetClaim(OpenIddictConstants.Claims.Subject, await userManager.GetUserIdAsync(user));
-        // name 一律取用户名（消除声明表昵称重复导致的数组）；业务表 name 列写入 family_name
+        // name 取业务完整姓名（缺失时按系统语言拼姓+名，最终账号兜底）；family_name/given_name 保留原值
         Util.NormalizeNameClaims(principal, user);
         principal.SetScopes(request.GetScopes());
         principal.SetResources(await scopeManager
