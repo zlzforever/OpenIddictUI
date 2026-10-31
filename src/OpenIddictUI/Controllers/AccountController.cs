@@ -141,8 +141,9 @@ public partial class AccountController(
             return Ok(ApiResult.Ok(data: new { location = model.ReturnUrl ?? "/" }));
         }
 
+        var phoneNumber = model.PhoneNumber?.Trim();
         // ① 按手机号查找用户
-        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
         if (user == null)
         {
             return Ok(Errors.UserNotExistResult);
@@ -165,7 +166,7 @@ public partial class AccountController(
                 var afResult = await userManager.AccessFailedAsync(user);
                 if (!afResult.Succeeded)
                 {
-                    logger.LogWarning("LoginByCode: AccessFailed 失败 {PhoneNumber}, {Errors}", model.PhoneNumber,
+                    logger.LogWarning("LoginByCode: AccessFailed 失败 {PhoneNumber}, {Errors}", phoneNumber,
                         string.Join(", ", afResult.Errors.Select(e => e.Description)));
                 }
             }
@@ -294,27 +295,27 @@ public partial class AccountController(
         switch (sendResult)
         {
             case SmsSendStatus.Sent:
-            {
-                await hybridCache.SetAsync(
-                    string.Format(Util.RegisterCode, phoneNumber),
-                    registerCode,
-                    new HybridCacheEntryOptions
-                    {
-                        Expiration = TimeSpan.FromMinutes(5),
-                        LocalCacheExpiration = TimeSpan.FromMinutes(5)
-                    });
+                {
+                    await hybridCache.SetAsync(
+                        string.Format(Util.RegisterCode, phoneNumber),
+                        registerCode,
+                        new HybridCacheEntryOptions
+                        {
+                            Expiration = TimeSpan.FromMinutes(5),
+                            LocalCacheExpiration = TimeSpan.FromMinutes(5)
+                        });
 
-                return Ok(ApiResult.Ok("发送成功"));
-            }
+                    return Ok(ApiResult.Ok("发送成功"));
+                }
             case SmsSendStatus.RateLimited:
-            {
-                return Ok(Errors.SendSmsFailedResult);
-            }
+                {
+                    return Ok(Errors.SendSmsFailedResult);
+                }
             default:
-            {
-                logger.LogWarning("SendCode(Register): phone is too frequent {PhoneNumber}", phoneNumber);
-                return Ok(ApiResult.Ok("发送成功"));
-            }
+                {
+                    logger.LogWarning("SendCode(Register): phone is too frequent {PhoneNumber}", phoneNumber);
+                    return Ok(ApiResult.Ok("发送成功"));
+                }
         }
     }
 
