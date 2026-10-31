@@ -174,7 +174,7 @@ async function submitChangePwd() {
   if (pwdNew.value !== pwdConfirm.value) { pwdMsg.value = t('changePassword.mismatch'); pwdOk.value = false; return }
 
   const data = await changePassword({
-    userName: username.value, oldPassword: pwdOld.value,
+    userName: username.value?.trim(), oldPassword: pwdOld.value,
     newPassword: pwdNew.value, confirmNewPassword: pwdConfirm.value,
     captchaCode: pwdCaptcha.value, button: 'login'
   }) as { code: number; message?: string }

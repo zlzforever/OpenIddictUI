@@ -87,7 +87,8 @@ public partial class AccountController(
         }
 
         // ⑤ 查找用户（软删除自动过滤，由 AppDbContext Global Query Filter 处理）
-        var user = await userManager.FindByNameAsync(model.Username);
+        var username = model.Username.Trim();
+        var user = await userManager.FindByNameAsync(username);
         if (user == null)
         {
             return Ok(Errors.InvalidCredentialsResult);
@@ -106,7 +107,7 @@ public partial class AccountController(
             return Ok(ApiResult.Error(code, msg));
         }
 
-        logger.LogInformation("Login: success for {Username}", model.Username);
+        logger.LogInformation("Login: success for {Username}", username);
 
         // ⑦ 登录成功 → 返回跳转地址
         return Ok(ApiResult.Ok(data: new { location = model.ReturnUrl ?? "/" }));
@@ -346,7 +347,8 @@ public partial class AccountController(
             return Ok(Errors.InvalidCaptcha);
         }
 
-        var user = await userManager.FindByNameAsync(model.UserName);
+        var userName = model.UserName.Trim();
+        var user = await userManager.FindByNameAsync(userName);
         if (user == null)
         {
             return Ok(Errors.UserNotExistResult);
@@ -366,7 +368,7 @@ public partial class AccountController(
                 var afResult = await userManager.AccessFailedAsync(user);
                 if (!afResult.Succeeded)
                 {
-                    logger.LogWarning("重置密码: AccessFailed 失败 {User}, {Errors}", model.UserName,
+                    logger.LogWarning("重置密码: AccessFailed 失败 {User}, {Errors}", userName,
                         string.Join(", ", afResult.Errors.Select(e => e.Description)));
                 }
             }
@@ -380,7 +382,7 @@ public partial class AccountController(
             var resetResult = await userManager.ResetAccessFailedCountAsync(user);
             if (!resetResult.Succeeded)
             {
-                logger.LogWarning("重置密码: ResetAccessFailedCount 失败 {User}, {Errors}", model.UserName,
+                logger.LogWarning("重置密码: ResetAccessFailedCount 失败 {User}, {Errors}", userName,
                     string.Join(", ", resetResult.Errors.Select(e => e.Description)));
                 return Ok(Errors.IncorrectPassword);
             }
@@ -394,7 +396,7 @@ public partial class AccountController(
             return Ok(ApiResult.Ok("修改成功"));
         }
 
-        logger.LogError("用户 {User} 重置密码失败: {Errors}", model.UserName,
+        logger.LogError("用户 {User} 重置密码失败: {Errors}", userName,
             string.Join(", ", result.Errors.Select(e => e.Description)));
         return Ok(Errors.ChangePasswordFailedResult);
     }
@@ -410,7 +412,8 @@ public partial class AccountController(
             return Ok(ApiResult.Error(400, GetModelErrors()));
         }
 
-        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+        var phoneNumber = model.PhoneNumber.Trim();
+        var user = await userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
         if (user == null)
         {
             return Ok(Errors.UserNotExistResult);
@@ -431,7 +434,7 @@ public partial class AccountController(
                 var afResult = await userManager.AccessFailedAsync(user);
                 if (!afResult.Succeeded)
                 {
-                    logger.LogWarning("重置密码(手机): AccessFailed 失败 {PhoneNumber}, {Errors}", model.PhoneNumber,
+                    logger.LogWarning("重置密码(手机): AccessFailed 失败 {PhoneNumber}, {Errors}", phoneNumber,
                         string.Join(", ", afResult.Errors.Select(e => e.Description)));
                 }
             }
@@ -445,7 +448,7 @@ public partial class AccountController(
             var resetResult = await userManager.ResetAccessFailedCountAsync(user);
             if (!resetResult.Succeeded)
             {
-                logger.LogWarning("重置密码(手机): ResetAccessFailedCount 失败 {PhoneNumber}, {Errors}", model.PhoneNumber,
+                logger.LogWarning("重置密码(手机): ResetAccessFailedCount 失败 {PhoneNumber}, {Errors}", phoneNumber,
                     string.Join(", ", resetResult.Errors.Select(e => e.Description)));
                 return Ok(Errors.ResetPasswordByPhoneFailed);
             }
@@ -458,7 +461,7 @@ public partial class AccountController(
             return Ok(ApiResult.Ok("修改成功"));
         }
 
-        logger.LogError("用户 {PhoneNumber} 重置密码失败: {Errors}", model.PhoneNumber,
+        logger.LogError("用户 {PhoneNumber} 重置密码失败: {Errors}", phoneNumber,
             string.Join(", ", result.Errors.Select(e => e.Description)));
         return Ok(Errors.ChangePasswordFailedResult);
     }

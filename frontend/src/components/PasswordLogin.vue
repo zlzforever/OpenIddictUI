@@ -56,7 +56,7 @@ async function submit() {
   emit('error', '')
   try {
     const data = await login({
-      username: username.value, password: password.value,
+      username: username.value.trim(), password: password.value,
       captchaCode: captcha.value, rememberLogin: remember.value,
       button: 'login', returnUrl: props.returnUrl || null
     }) as { data?: { location?: string }; message?: string }
