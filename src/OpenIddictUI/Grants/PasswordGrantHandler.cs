@@ -23,15 +23,16 @@ public class PasswordGrantHandler : BaseGrantHandler
         var logger = services.GetRequiredService<ILogger<PasswordGrantHandler>>();
         var serviceOptions = context.RequestServices.GetRequiredService<IOptions<OpenIddictOptions>>().Value;
         var hybridCache = services.GetRequiredService<HybridCache>();
-        if (string.IsNullOrEmpty(request.Username))
+        var username = request.Username?.Trim();
+        if (string.IsNullOrEmpty(username))
         {
             return Failure("用户名或密码错误");
         }
 
-        var user = await userManager.FindByNameAsync(request.Username);
+        var user = await userManager.FindByNameAsync(username);
         if (user == null)
         {
-            logger.LogWarning("Password grant: user {Username} not found", request.Username);
+            logger.LogWarning("Password grant: user {Username} not found", username);
             return Failure("用户名或密码错误");
         }
 
@@ -52,7 +53,7 @@ public class PasswordGrantHandler : BaseGrantHandler
         var result = await signInManager.CheckPasswordSignInAsync(user, request.Password!, true);
         if (!result.Succeeded)
         {
-            logger.LogWarning("Password grant: failed for {Username}", request.Username);
+            logger.LogWarning("Password grant: failed for {Username}", username);
             return Failure(result.IsLockedOut ? "用户被锁定"
                 : result.IsNotAllowed ? "用户被禁用"
                 : "用户名或密码错误");
@@ -75,7 +76,7 @@ public class PasswordGrantHandler : BaseGrantHandler
         }
         principal.SetClaim(OpenIddictConstants.Claims.AuthenticationMethodReference, "password");
 
-        logger.LogInformation("Password grant: success for {Username}", request.Username);
+        logger.LogInformation("Password grant: success for {Username}", username);
         return Success(principal);
     }
 }

@@ -91,6 +91,34 @@ public class PasswordGrantHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_TrimsUsername_ButPreservesPassword()
+    {
+        var (ctx, um, sm) = CreateMocks();
+        var user = new User { UserName = "testuser" };
+        um.Setup(m => m.FindByNameAsync("testuser")).ReturnsAsync(user);
+        sm.Setup(m => m.CheckPasswordSignInAsync(user, " P@ss1234 ", true))
+            .ReturnsAsync(SignInResult.Failed);
+
+        var result = await _handler.ExecuteAsync(
+            CreateRequest(username: "  testuser  ", password: " P@ss1234 "), ctx, CancellationToken.None);
+
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ForbidResult>();
+        um.Verify(m => m.FindByNameAsync("testuser"), Times.Once);
+        sm.Verify(m => m.CheckPasswordSignInAsync(user, " P@ss1234 ", true), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhitespaceUsername_DoesNotLookUpUser()
+    {
+        var (ctx, um, _) = CreateMocks();
+
+        var result = await _handler.ExecuteAsync(CreateRequest(username: "  "), ctx, CancellationToken.None);
+
+        result.Should().BeOfType<Microsoft.AspNetCore.Mvc.ForbidResult>();
+        um.Verify(m => m.FindByNameAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ValidCredentials_ReturnsSignIn()
     {
         var (ctx, um, sm) = CreateMocks();

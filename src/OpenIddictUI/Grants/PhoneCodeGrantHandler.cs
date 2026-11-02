@@ -20,7 +20,7 @@ public class PhoneCodeGrantHandler : BaseGrantHandler
         var scopeManager = services.GetRequiredService<IOpenIddictScopeManager>();
         var logger = services.GetRequiredService<ILogger<PhoneCodeGrantHandler>>();
 
-        var phoneNumber = (string?)request["phone_number"];
+        var phoneNumber = ((string?)request["phone_number"])?.Trim();
         var code = (string?)request["code"];
 
         if (string.IsNullOrEmpty(phoneNumber) || string.IsNullOrEmpty(code))

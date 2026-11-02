@@ -46,14 +46,14 @@ const sliderRef = ref<InstanceType<typeof SliderCaptcha> | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
 
 function startSend() {
-  if (!phone.value) { emit('error', t('smsLogin.enterPhone')); return }
+  if (!phone.value.trim()) { emit('error', t('smsLogin.enterPhone')); return }
   emit('error', '')
   sliderRef.value?.start()
 }
 
 async function doSendCode() {
   const data = await sendSmsCode({
-    phoneNumber: phone.value, countryCode: '+86', scenario: 'Login'
+    phoneNumber: phone.value.trim(), countryCode: '+86', scenario: 'Login'
   }) as { code: number; message?: string }
   if (data.code !== 200) { emit('error', data.message || ''); return }
   cooling.value = true
@@ -65,7 +65,7 @@ async function submit() {
   emit('error', '')
   try {
     const data = await loginBySms({
-      phoneNumber: phone.value, verifyCode: code.value,
+      phoneNumber: phone.value.trim(), verifyCode: code.value,
       button: 'login', returnUrl: props.returnUrl || null
     }) as { data?: { location?: string }; message?: string }
     if (data.data?.location) {

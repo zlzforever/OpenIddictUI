@@ -45,7 +45,7 @@ onMounted(refresh)
 async function submit() {
   msg.value = ''
   const data = await changePassword({
-    userName: userName.value, oldPassword: oldPwd.value,
+    userName: userName.value.trim(), oldPassword: oldPwd.value,
     newPassword: newPwd.value, confirmNewPassword: newPwd.value,
     captchaCode: captcha.value, button: 'login'
   }) as { code: number; message?: string }
