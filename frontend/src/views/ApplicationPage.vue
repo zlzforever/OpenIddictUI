@@ -34,9 +34,9 @@
     <p v-else style="color:var(--text-muted)">{{ $t('applications.noData') }}</p>
 
     <n-modal :show="showModal" :title="editing?$t('applications.edit')+' Application':$t('applications.add')+' Application'" @update:show="showModal=$event"
-      preset="card" style="width:740px;min-height:620px" :mask-closable="false">
-      <n-form label-placement="top" size="small">
-        <n-tabs type="segment" animated style="min-height:520px">
+      preset="card" class="application-editor-modal" :mask-closable="false">
+      <n-form class="application-editor-form" label-placement="top" size="small">
+        <n-tabs class="application-editor-tabs" type="segment" animated>
           <n-tab-pane name="basic" :tab="$t('applications.tabBasic')">
             <n-grid :cols="2" :x-gap="12">
               <n-form-item-gi :label="$t('applications.clientId')"><n-input v-model:value="form.clientId" :disabled="editing"/></n-form-item-gi>
@@ -101,9 +101,13 @@
             </div>
             </div>
           </n-tab-pane>
-          <n-tab-pane name="uris" :tab="$t('applications.tabUris')">
-            <n-form-item :label="$t('applications.redirectUris')"><n-input v-model:value="form.redirectUrisText" type="textarea" :rows="4"/></n-form-item>
-            <n-form-item :label="$t('applications.postLogoutUris')"><n-input v-model:value="form.postLogoutRedirectUrisText" type="textarea" :rows="3"/></n-form-item>
+          <n-tab-pane class="application-editor-uri-pane" name="uris" :tab="$t('applications.tabUris')">
+            <n-form-item class="application-editor-uri-item" :label="$t('applications.redirectUris')">
+              <n-input class="application-editor-uri-input" v-model:value="form.redirectUrisText" type="textarea" :rows="4"/>
+            </n-form-item>
+            <n-form-item class="application-editor-uri-item" :label="$t('applications.postLogoutUris')">
+              <n-input class="application-editor-uri-input" v-model:value="form.postLogoutRedirectUrisText" type="textarea" :rows="3"/>
+            </n-form-item>
           </n-tab-pane>
           <n-tab-pane name="display" :tab="$t('applications.tabDisplay')">
             <n-form-item :label="$t('applications.clientUrl')"><n-input v-model:value="form.clientUrl" placeholder="https://example.com"/></n-form-item>
@@ -188,4 +192,93 @@ async function delApp(a:AppInfo){ const r=await fetch(`${api}api/applications/${
 .app-card-tags { display:flex; flex-wrap:wrap; gap:4px; align-items:center }
 .app-card-label { font-size:0.75rem; color:var(--text-muted); margin-right:4px; white-space:nowrap }
 .app-card-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:4px }
+
+:global(.application-editor-modal) {
+  width: min(740px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+}
+
+@supports (height: 100dvh) {
+  :global(.application-editor-modal) {
+    height: min(760px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+:global(.application-editor-modal > .n-card-content) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(.application-editor-modal > .n-card__footer) {
+  flex-shrink: 0;
+}
+
+:global(.application-editor-form) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:global(.application-editor-tabs) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:global(.application-editor-tabs > .n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+:global(.application-editor-tabs > .n-tabs-pane-wrapper > .n-tab-pane) {
+  box-sizing: border-box;
+  min-height: 100%;
+}
+
+:global(.application-editor-uri-pane) {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  min-height: 100%;
+}
+
+:global(.application-editor-uri-item) {
+  min-height: 0;
+}
+
+:global(.application-editor-uri-item .n-form-item-blank) {
+  align-items: stretch;
+  min-height: 0;
+}
+
+:global(.application-editor-uri-input) {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+:global(.application-editor-uri-input .n-input__textarea) {
+  height: 100%;
+  min-height: 0;
+}
+
+:global(.application-editor-uri-input .n-scrollbar-container) {
+  height: 100%;
+  min-height: 0;
+}
+
+:global(.application-editor-uri-input .n-input__textarea-el) {
+  height: 100%;
+  overflow: auto;
+}
 </style>
