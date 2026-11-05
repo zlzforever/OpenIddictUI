@@ -14,8 +14,11 @@ using OpenIddictUI.Middlewares;
 using OpenIddictUI.Options;
 using OpenIddictUI.Plugins;
 using OpenIddictUI.Sms;
+using OpenIddictUI.TemporaryTokens;
 using OpenIddictUI.Weixin;
+using OpenIddict.Validation;
 using Serilog;
+using Serilog.Events;
 
 namespace OpenIddictUI;
 
@@ -42,7 +45,14 @@ public partial class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.AddSubstitution();
         builder.Configuration.AddJsonFile("openiddict-seed.json", optional: true, reloadOnChange: true);
-        builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
+        // OpenIddict validation trace messages include the raw bearer token.
+        // Never allow those events through even if trace logging is enabled.
+        builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration)
+            .Filter.ByExcluding(logEvent =>
+                logEvent.Level == LogEventLevel.Verbose &&
+                logEvent.Properties.TryGetValue("SourceContext", out var source) &&
+                source is ScalarValue { Value: string name } &&
+                name.StartsWith("OpenIddict.Validation", StringComparison.Ordinal)));
 
         var config = builder.Configuration;
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -57,6 +67,12 @@ public partial class Program
         builder.Services.Configure<IdentityOptions>(config.GetSection("Identity"));
         builder.Services.Configure<CookiePolicyOptions>(config.GetSection("CookiePolicy"));
         builder.Services.Configure<GlobalOptions>(config);
+        builder.Services.AddSingleton<TemporaryTokenService>();
+        builder.Services.PostConfigure<OpenIddictValidationOptions>(options =>
+        {
+            options.TokenValidationParameters.ValidateLifetime = true;
+            options.TokenValidationParameters.ClockSkew = TimeSpan.Zero;
+        });
 
         var openiddictOptions = openiddictOptionSection.Exists()
             ? openiddictOptionSection.Get<OpenIddictOptions>() ?? new OpenIddictOptions()
@@ -267,7 +283,7 @@ public partial class Program
                             OpenIddict.Server.OpenIddictServerEvents.ApplyConfigurationResponseContext>(e =>
                             e.UseInlineHandler(context =>
                             {
-                                context.Response["issuer"] = new OpenIddict.Abstractions.OpenIddictParameter(baseUrl);
+                                context.Response["issuer"] = new OpenIddict.Abstractions.OpenIddictParameter(new Uri(baseUrl).AbsoluteUri);
                                 context.Response["authorization_endpoint"] =
                                     new OpenIddict.Abstractions.OpenIddictParameter($"{baseUrl}/connect/authorize");
                                 context.Response["token_endpoint"] =
@@ -315,6 +331,7 @@ public partial class Program
             {
                 options.UseLocalServer();
                 options.UseAspNetCore();
+                options.RejectTemporaryTokenProofOfPossession();
             });
 
         builder.Services.AddAntiforgery(options =>
