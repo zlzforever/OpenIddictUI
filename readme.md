@@ -26,6 +26,66 @@ STS 支持 PostgreSQL 和 MySQL 8.0+。完整的 provider 选择、`DefaultConne
 - PostgreSQL 与 MySQL 的 EF provider 和分布式缓存都会使用 `ConnectionStrings:DefaultConnection`，不会在数据库不可用时降级到内存缓存。
 - MySQL 仅支持 8.0 及以上版本，不承诺 MySQL 5.7 或 MariaDB；应用启动时会准备并校验 MySQL 缓存表。
 
+## 临时只读令牌
+
+已有本 STS 签发的有效 JWT access token 时，可以调用 `POST /api/temporary-tokens` 签发临时令牌，供可信接收方在限定时间内多次调用业务 API。仅接受 `Authorization: Bearer` 中的原始 access token，不能使用登录 Cookie、ID token 或临时令牌申请；不会返回 refresh token，也不能用临时令牌再次申请。有效期最多 5 分钟，且不超过原令牌的到期时间。
+
+### 1. 配置签发策略
+
+默认不启用任何目标。先将 STS 的 `OpenIddict:Issuer` 配置为稳定的公开签发地址，再由管理员审查接收方和原令牌声明，配置允许的 scope、audience 和声明。以下是 STS 配置示例，**仅用于说明，不应直接视为安全的生产配置**：
+
+```json
+{
+  "OpenIddict": { "Issuer": "https://issuer.example" },
+  "TemporaryTokens": {
+    "Scopes": { "api1": ["api1"] },
+    "Audiences": {
+      "api1": {
+        "Enabled": true,
+        "IndependentClaims": ["name", "role", "client_id"]
+      }
+    }
+  }
+}
+```
+
+- 每个选中的 scope 都必须映射到原令牌包含的至少一个 audience；签发出的每个 scope/audience 组合都必须得到配置允许，且每个 audience 均须启用。策略名称区分大小写，避免在 scope/audience 名称中使用 `:`。
+- `IndependentClaims` 是管理员对声明安全性的明确确认，不是随意复制的白名单。除协议字段和 `sub` 外，原令牌中保留的每个声明都必须出现在每个目标 audience 的列表中；缺少配置或未审核的声明将拒绝签发。尤其要与接收方核实角色、租户、嵌套权限及自定义声明在所有选中 scope 下不会扩大权限。
+- 每个共享该 audience 的服务都必须验证签名、issuer、audience、scope 和有效期，并识别 `token_use=temporary_readonly`：按**业务操作**拒绝写操作及未分类操作，同时保留原有数据和角色授权。不能仅靠 HTTP 方法判断只读，也不能只依赖签发方；未检查该标记的服务可能允许写入。
+
+### 2. 申请并使用
+
+使用正常 OAuth 流程取得原始 access token 后，在受保护的终端执行以下示例；将域名替换为实际 HTTPS 地址。命令通过静默输入和 curl 标准输入配置避免将令牌放入命令参数或 shell 历史，响应仍包含敏感令牌，必须在安全环境处理，勿开启 shell 跟踪：
+
+```bash
+read -r -s SOURCE_TOKEN
+curl --config - <<EOF
+url = "https://issuer.example/api/temporary-tokens"
+request = "POST"
+header = "Authorization: Bearer $SOURCE_TOKEN"
+header = "Content-Type: application/json"
+data = "{\"scopes\":[\"api1\"]}"
+EOF
+unset SOURCE_TOKEN
+```
+
+请求体 `{}` 继承原令牌全部 scope；`scopes` 数组可指定非空子集，但不能扩大权限。成功响应为 `ApiResult`，令牌位于 `data.accessToken`，另有 `data.tokenType`、UTC 时间 `data.expiresAt` 和 `data.scopes`。缺少或无效 Bearer 通常返回 401，无效 scope 选择返回 400，令牌或目标不允许分享返回 403。
+
+将返回的 `accessToken` 安全地提供给可信接收方，调用示例 API：
+
+```bash
+read -r -s TEMPORARY_TOKEN
+curl --config - <<EOF
+url = "https://api.example/api/me"
+header = "Authorization: Bearer $TEMPORARY_TOKEN"
+EOF
+unset TEMPORARY_TOKEN
+```
+
+示例 API 的 `Authority` 需指向 STS，`ValidAudiences` 默认包含 `api1`；非开发环境要求 HTTPS metadata。`GET /api/me` 是只读示例，临时令牌访问 `POST /api/test-write` 或未分类的 `GET /api/unclassified` 会得到 403。
+
+临时令牌是可转发的 Bearer 凭据，不要放入 URL、日志或未加密的通信。退出登录、禁用账号或撤销原令牌并不保证已签发的临时令牌立即失效；如需停止新签发，禁用或删除目标策略，并在最长令牌有效期加上接收方时钟容差内继续保留只读保护。更多边界、部署与回滚说明见 [`docs/temporary-tokens.md`](docs/temporary-tokens.md)。
+
 ## 项目结构
 
 ```
